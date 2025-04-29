@@ -1,0 +1,1421 @@
+import Head from 'next/head';
+import dynamic from 'next/dynamic';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import '../styles/dashboard.css';
+import { io } from 'socket.io-client';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import { signIn, signOut, useSession } from 'next-auth/react';
+import { getSession } from 'next-auth/react';
+
+const Bar = dynamic(() => import('react-chartjs-2').then((mod) => mod.Bar), { ssr: false });
+import { Chart, LinearScale, CategoryScale, BarElement, Tooltip, Legend } from 'chart.js';
+
+Chart.register(LinearScale, CategoryScale, BarElement, Tooltip, Legend);
+
+export default function Dashboard() {
+  const { publicKey, signMessage, connect, disconnect, connected } = useWallet();
+  const { data: session, status } = useSession();
+  const [isConnected, setIsConnected] = useState(false);
+  const [walletAddress, setWalletAddress] = useState('');
+  const [connectedWallet, setConnectedWallet] = useState(null);
+  const [referralsCount, setReferralsCount] = useState(0);
+  const [currentTier, setCurrentTier] = useState('None');
+  const [isNodeConnected, setIsNodeConnected] = useState(false);
+  const [jwt, setJwt] = useState(null);
+  const [activeTab, setActiveTab] = useState('profile');
+  const [lastSignedTime, setLastSignedTime] = useState(null);
+  const [totalPoints, setTotalPoints] = useState(0);
+  const [todayPoints, setTodayPoints] = useState(0);
+  const [hoursToday, setHoursToday] = useState(0);
+  const [daysSeason1, setDaysSeason1] = useState(0);
+  const [networkStrength, setNetworkStrength] = useState(0);
+  const [referralCode, setReferralCode] = useState('');
+  const [referralLink, setReferralLink] = useState('');
+  const [referralRanking, setReferralRanking] = useState([]);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [referralPage, setReferralPage] = useState(1);
+  const [leaderboardPage, setLeaderboardPage] = useState(1);
+  const [referralSearch, setReferralSearch] = useState('');
+  const [leaderboardSearch, setLeaderboardSearch] = useState('');
+  const [dailyPoints, setDailyPoints] = useState(Array(14).fill(0));
+  const [referralCodeInput, setReferralCodeInput] = useState(['', '', '', '', '', '']);
+  const [showReferralInput, setShowReferralInput] = useState(true);
+  const [referralError, setReferralError] = useState('');
+  const [solanaConnected, setSolanaConnected] = useState(false);
+  const [discordConnected, setDiscordConnected] = useState(false);
+  const [discordUsername, setDiscordUsername] = useState('');
+  const [error, setError] = useState('');
+  const [isSigning, setIsSigning] = useState(false);
+  const [isUpdatingRoles, setIsUpdatingRoles] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const signedRef = useRef(false);
+  const socketRef = useRef(null);
+  const inputRefs = useRef([]);
+
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001/api';
+  const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000';
+  const itemsPerPage = 5;
+
+  const tabs = [
+    { id: 'profile', label: 'Profile' },
+    { id: 'nodes', label: 'Nodes' },
+    { id: 'referrals', label: 'Referrals' },
+    { id: 'leaderboard', label: 'Leaderboard' },
+  ];
+
+  const checkStorageAccess = useCallback(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem('test', 'test');
+        localStorage.removeItem('test');
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error('Storage access error:', e);
+      return false;
+    }
+  }, []);
+
+  const setJwtToken = useCallback((token) => {
+    if (checkStorageAccess()) {
+      try {
+        localStorage.setItem('jwt', token);
+      } catch (e) {
+        console.error('Failed to set JWT in localStorage:', e);
+        setJwt(token);
+      }
+    } else {
+      setJwt(token);
+    }
+  }, [checkStorageAccess]);
+
+  const getJwt = useCallback(() => {
+    if (checkStorageAccess()) {
+      try {
+        return localStorage.getItem('jwt');
+      } catch (e) {
+        console.error('Failed to get JWT from localStorage:', e);
+        return jwt;
+      }
+    }
+    return jwt;
+  }, [checkStorageAccess, jwt]);
+
+  const fetchWithAuth = useCallback(async (endpoint, method = 'GET', body = null, retries = 3) => {
+    const token = getJwt();
+    if (!token) {
+      console.error('No JWT token available for endpoint:', endpoint);
+      setError('Vui lòng đăng nhập lại');
+      return null;
+    }
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    };
+    const options = { method, headers };
+    if (body) options.body = JSON.stringify(body);
+
+    for (let i = 0; i < retries; i++) {
+      try {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
+        if (response.status === 401) {
+          console.error('Unauthorized error for', endpoint);
+          setError('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+          setJwt(null);
+          if (checkStorageAccess()) {
+            localStorage.removeItem('jwt');
+          }
+          setIsConnected(false);
+          return null;
+        }
+        if (response.status === 403) {
+          console.error('Forbidden error for', endpoint);
+          setError('Không có quyền truy cập. Vui lòng thử lại.');
+          return null; // Không reload trang
+        }
+        if (!response.ok) {
+          console.error('HTTP error for', endpoint, ': Status', response.status);
+          throw new Error(`HTTP error ${response.status} for ${endpoint}`);
+        }
+        return await response.json();
+      } catch (error) {
+        console.error('Fetch attempt', i + 1, 'failed for', endpoint, ':', error.message);
+        if (i === retries - 1) {
+          setError('Lỗi kết nối máy chủ. Vui lòng thử lại.');
+          return null;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+  }, [getJwt, checkStorageAccess , API_BASE_URL]);
+
+  // Cập nhật trạng thái Discord từ session
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user?.discordId) {
+      setDiscordConnected(true);
+      setDiscordUsername(session.user.name || 'Discord User');
+      // Không tự động gọi /api/update-discord-id nữa
+    } else {
+      setDiscordConnected(false);
+      setDiscordUsername('');
+    }
+  }, [session, status]);
+
+  const savePointsToDB = useCallback(async (wallet, date, points) => {
+    try {
+      const response = await fetchWithAuth('/save-points', 'POST', {
+        wallet,
+        date,
+        points,
+      });
+      if (!response.success) {
+        throw new Error('Failed to save points');
+      }
+    } catch (error) {
+      console.error('Error saving points to DB:', error);
+    }
+  }, [fetchWithAuth]);
+
+  const fetchReferralInfo = useCallback(async (publicKey) => {
+    try {
+      const info = await fetchWithAuth(`/referrals/info?publicKey=${publicKey}`);
+      setReferralCode(info.code || '');
+      setReferralLink(info.link || '');
+      setReferralsCount(info.referralsCount || 0);
+    } catch (error) {
+      console.error('Error fetching referral info:', error);
+    }
+  }, [fetchWithAuth]);
+
+  const fetchReferralRanking = useCallback(async () => {
+    try {
+      const data = await fetchWithAuth('/referrals/ranking');
+      if (Array.isArray(data)) {
+        setReferralRanking(data);
+      } else {
+        console.warn('Referral ranking is not an array:', data);
+        setReferralRanking([]);
+      }
+    } catch (error) {
+      console.error('Error fetching referral ranking:', error);
+      setReferralRanking([]);
+    }
+  }, [fetchWithAuth]);
+
+  const fetchLeaderboard = useCallback(async () => {
+    try {
+      const data = await fetchWithAuth('/leaderboard');
+      if (Array.isArray(data)) {
+        setLeaderboard(data);
+      } else {
+        setLeaderboard([]);
+      }
+    } catch (error) {
+      console.error('Error fetching leaderboard:', error);
+      setLeaderboard([]);
+    }
+  }, [fetchWithAuth]);
+
+  const fetchUserStats = useCallback(async () => {
+    try {
+      const stats = await fetchWithAuth('/user-stats');
+      if (stats) {
+        console.log(`Fetched stats: totalPoints=${stats.totalPoints}, currentTier=${stats.currentTier}`);
+        setTotalPoints(stats.totalPoints || 0);
+        setTodayPoints(stats.todayPoints || 0);
+        setHoursToday(stats.hoursToday || 0);
+        setDaysSeason1(stats.daysSeason1 || 0);
+        setReferralsCount(stats.referralsCount || 0);
+        setCurrentTier(stats.currentTier || 'None');
+        setNetworkStrength(stats.networkStrength || 0);
+        setIsNodeConnected(stats.networkStrength > 0);
+        setDailyPoints(stats.dailyPoints || Array(14).fill(0));
+
+        const today = new Date();
+        const todayStr = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
+        if (walletAddress) {
+          await savePointsToDB(walletAddress, todayStr, stats.todayPoints || 0);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user stats:', error);
+      setTotalPoints(0);
+      setTodayPoints(0);
+      setHoursToday(0);
+      setDaysSeason1(0);
+      setReferralsCount(0);
+      setCurrentTier('None');
+      setNetworkStrength(0);
+      setIsNodeConnected(false);
+      setDailyPoints(Array(14).fill(0));
+    }
+  }, [walletAddress, savePointsToDB, fetchWithAuth]);
+
+  const connectDiscord = useCallback(async () => {
+    if (!publicKey) {
+      setError('Vui lòng kết nối ví Solana trước');
+      return;
+    }
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const result = await signIn('discord', { redirect: false });
+      if (result.error) {
+        console.log('SignIn returned temporary error, continuing:', result.error);
+      }
+
+      const checkSession = async (maxAttempts = 5, delay = 1000) => {
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          const currentSession = await getSession();
+          if (currentSession?.user?.discordId) {
+            console.log(`Session found on attempt ${attempt}:`, currentSession.user);
+            const response = await fetchWithAuth('/update-discord-id', 'POST', {
+              publicKey: publicKey.toString(),
+              discordId: currentSession.user.discordId,
+            });
+            if (!response?.success) {
+              console.error('Failed to link Discord:', response?.error);
+              setError(response?.error || 'Không thể liên kết tài khoản Discord');
+              setDiscordConnected(false);
+              setDiscordUsername('');
+              await signOut({ redirect: false });
+            } else {
+              setDiscordConnected(true);
+              setDiscordUsername(currentSession.user.name || 'Discord User');
+              setError('');
+              // Đảm bảo isConnected được đặt nếu ví đã được ký
+              const token = getJwt();
+              if (token && publicKey && connected && !isConnected) {
+                setIsConnected(true);
+                setWalletAddress(publicKey.toString());
+                setSolanaConnected(true);
+                setConnectedWallet({ publicKey });
+                signedRef.current = true;
+                if (socketRef.current) {
+                  socketRef.current.emit('join', publicKey.toString());
+                }
+              }
+            }
+            return true;
+          }
+          console.log(`Session not ready on attempt ${attempt}, waiting ${delay}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+        return false;
+      };
+
+      const sessionFound = await checkSession();
+      if (!sessionFound) {
+        console.error('Session not found after retries');
+        setError('Không thể lấy thông tin Discord. Vui lòng thử lại.');
+      }
+    } catch (error) {
+      console.error('Critical error connecting Discord:', error);
+      setError(error.message || 'Không thể kết nối Discord');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [publicKey, fetchWithAuth, getJwt, connected, isConnected]);
+
+  const disconnectDiscord = useCallback(async () => {
+    if (!publicKey) {
+      setError('Vui lòng kết nối ví Solana trước');
+      return;
+    }
+    setIsLoading(true);
+    setError('');
+    try {
+      const response = await fetchWithAuth('/disconnect-discord', 'POST', {
+        publicKey: publicKey.toString(),
+      });
+      if (!response?.success) {
+        throw new Error(response?.error || 'Không thể ngắt kết nối Discord');
+      }
+      await signOut({ redirect: false });
+      setDiscordConnected(false);
+      setDiscordUsername('');
+      setError('');
+      console.log('Discord disconnected successfully');
+    } catch (error) {
+      console.error('Error disconnecting Discord:', error);
+      setError(error.message || 'Không thể ngắt kết nối Discord');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [publicKey, fetchWithAuth]);
+
+  const updateDiscordRoles = useCallback(async () => {
+    if (!discordConnected || !publicKey) {
+      setError('Vui lòng kết nối ví Solana và Discord trước');
+      return;
+    }
+    setIsUpdatingRoles(true);
+    try {
+      const response = await fetchWithAuth('/discord/update-roles', 'POST', {
+        publicKey: publicKey.toString(),
+      });
+      if (response.success) {
+        alert('Discord role update request successful!');
+      } else {
+        throw new Error(response.error || 'Không thể cập nhật vai trò');
+      }
+    } catch (error) {
+      console.error('Error updating Discord roles:', error);
+      setError('Không thể cập nhật vai trò Discord');
+    } finally {
+      setIsUpdatingRoles(false);
+    }
+  }, [discordConnected, publicKey, fetchWithAuth]);
+
+  const canSignWallet = useCallback(() => {
+    if (!lastSignedTime) return true;
+    const now = Date.now();
+    const hoursSinceLastSign = (now - lastSignedTime) / (1000 * 60 * 60);
+    return hoursSinceLastSign >= 24;
+  }, [lastSignedTime]);
+
+  const handleReferralInputChange = (index, value) => {
+    if (value.length > 1) return;
+    const newInput = [...referralCodeInput];
+    newInput[index] = value.toUpperCase();
+    setReferralCodeInput(newInput);
+    setReferralError('');
+
+    if (value && index < 5) {
+      inputRefs.current[index + 1].focus();
+    }
+  };
+
+  const handleReferralKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !referralCodeInput[index] && index > 0) {
+      inputRefs.current[index - 1].focus();
+    }
+  };
+
+  const handleReferralSubmit = useCallback(async () => {
+    const code = referralCodeInput.join('');
+    if (code.length === 0) {
+      setShowReferralInput(false);
+      setReferralError('');
+      return;
+    }
+    if (code.length !== 6) {
+      setReferralError('Mã mời phải có 6 ký tự!');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/referrals/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ referralCode: code }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.error('Non-JSON response from /referrals/validate:', text);
+        setReferralError('Lỗi khi kiểm tra mã mời. Vui lòng thử lại.');
+        return;
+      }
+
+      const result = await response.json();
+      if (result.success) {
+        setShowReferralInput(false);
+        setReferralError('');
+      } else {
+        setReferralError('Mã mời không hợp lệ hoặc đã được sử dụng.');
+      }
+    } catch (error) {
+      console.error('Error validating referral code:', error);
+      setReferralError('Lỗi khi kiểm tra mã mời. Vui lòng thử lại.');
+    }
+  }, [referralCodeInput]);
+
+  const handleReferralSkip = useCallback(() => {
+    setReferralCodeInput(['', '', '', '', '', '']);
+    setShowReferralInput(false);
+    setReferralError('');
+  }, []);
+
+  const connectAndSignWallet = useCallback(async () => {
+    if (isConnected || isSigning || !canSignWallet() || signedRef.current) {
+      return;
+    }
+
+    setIsSigning(true);
+    setError('');
+
+    try {
+      if (!connected) {
+        await connect();
+      }
+
+      if (!publicKey || !signMessage) {
+        throw new Error('Wallet not connected or signMessage not available');
+      }
+
+      const publicKeyStr = publicKey.toString();
+      const message = 'Sign this message to verify your wallet for NexusAI Nodes';
+      const encodedMessage = new TextEncoder().encode(message);
+
+      let signed;
+      try {
+        signed = await signMessage(encodedMessage);
+      } catch (error) {
+        console.error('Error signing message:', error);
+        setError('Bạn đã hủy xác nhận ví. Vui lòng thử lại!');
+        setIsSigning(false);
+        return;
+      }
+
+      const signatureBase64 = btoa(String.fromCharCode(...signed));
+
+      let response;
+      try {
+        response = await fetch(`${API_BASE_URL}/auth/sign`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            publicKey: publicKeyStr,
+            signature: signatureBase64,
+            referralCode: referralCodeInput.join('') || undefined,
+          }),
+        });
+      } catch (error) {
+        console.error('Fetch error:', error);
+        setError('Không thể kết nối tới server. Vui lòng kiểm tra kết nối mạng và thử lại.');
+        setIsSigning(false);
+        return;
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Server error:', response.status, errorText);
+        setError(`Lỗi server: ${errorText || 'Không thể xác thực ví. Vui lòng thử lại.'}`);
+        setIsSigning(false);
+        return;
+      }
+
+      const result = await response.json();
+
+      if (result.token) {
+        setJwtToken(result.token);
+        setIsConnected(true);
+        setWalletAddress(publicKeyStr);
+        setConnectedWallet({ publicKey });
+        setSolanaConnected(true);
+        setLastSignedTime(Date.now());
+        signedRef.current = true;
+        if (socketRef.current) {
+          socketRef.current.emit('join', publicKeyStr);
+        }
+        fetchReferralInfo(publicKeyStr);
+        fetchReferralRanking();
+        fetchLeaderboard();
+        fetchUserStats();
+      } else {
+        throw new Error(result.error || 'Authentication failed');
+      }
+    } catch (error) {
+      console.error('Error connecting or signing wallet:', error);
+      setError(error.message || 'Xác thực thất bại. Vui lòng thử lại.');
+    } finally {
+      setIsSigning(false);
+    }
+  }, [
+    API_BASE_URL,
+    isConnected,
+    isSigning,
+    canSignWallet,
+    connected,
+    connect,
+    publicKey,
+    signMessage,
+    referralCodeInput,
+    setJwtToken,
+    fetchReferralInfo,
+    fetchReferralRanking,
+    fetchLeaderboard,
+    fetchUserStats,
+  ]);
+
+  const disconnectSolana = useCallback(async () => {
+    try {
+      await disconnect();
+      setSolanaConnected(false);
+      setIsConnected(false);
+      setWalletAddress('');
+      setConnectedWallet(null);
+      signedRef.current = false;
+    } catch (err) {
+      setError('Failed to disconnect Solana wallet');
+    }
+  }, [disconnect]);
+
+  const logout = useCallback(() => {
+    if (connectedWallet) {
+      disconnectSolana();
+    }
+    setIsConnected(false);
+    setWalletAddress('');
+    setConnectedWallet(null);
+    setLastSignedTime(null);
+    setReferralsCount(0);
+    setCurrentTier('None');
+    setIsNodeConnected(false);
+    setTotalPoints(0);
+    setTodayPoints(0);
+    setHoursToday(0);
+    setDaysSeason1(0);
+    setNetworkStrength(0);
+    setReferralCode('');
+    setReferralLink('');
+    setReferralRanking([]);
+    setLeaderboard([]);
+    setDailyPoints(Array(14).fill(0));
+    setReferralCodeInput(['', '', '', '', '', '']);
+    setShowReferralInput(true);
+    setReferralError('');
+    setSolanaConnected(false);
+    setDiscordConnected(false);
+    setDiscordUsername('');
+    signedRef.current = false;
+    if (checkStorageAccess()) {
+      try {
+        localStorage.removeItem('jwt');
+      } catch (e) {
+        console.error('Failed to remove JWT from localStorage:', e);
+      }
+    }
+    setJwt(null);
+    if (socketRef.current) {
+      socketRef.current.emit('node-disconnect');
+      socketRef.current.disconnect();
+    }
+  }, [checkStorageAccess, connectedWallet, disconnectSolana , API_BASE_URL]);
+
+  const toggleNodeConnection = useCallback(async () => {
+    if (!connectedWallet || !publicKey) {
+      console.error('No wallet connected');
+      setError('Please connect a Solana wallet to toggle node connection');
+      return;
+    }
+
+    const publicKeyStr = publicKey.toString();
+    if (!isNodeConnected) {
+      try {
+        const message = 'Sign to activate S.AI Node connection';
+        const encodedMessage = new TextEncoder().encode(message);
+        const signed = await signMessage(encodedMessage);
+        const signatureBase64 = btoa(String.fromCharCode(...signed));
+
+        const response = await fetch(`${API_BASE_URL}/auth/sign`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ publicKey: publicKeyStr, signature: signatureBase64 }),
+        });
+        const result = await response.json();
+
+        if (result.token) {
+          setJwtToken(result.token);
+          setIsNodeConnected(true);
+          setNetworkStrength(4);
+          if (socketRef.current) {
+            socketRef.current.emit('node-connect', publicKeyStr);
+          }
+        } else {
+          throw new Error(result.error || 'Node connection authentication failed');
+        }
+      } catch (error) {
+        console.error('Error signing wallet for node connection:', error);
+        setError('Failed to connect node');
+      }
+    } else {
+      setIsNodeConnected(false);
+      setNetworkStrength(0);
+      if (socketRef.current) {
+        socketRef.current.emit('node-disconnect');
+      }
+    }
+  }, [connectedWallet, publicKey, signMessage, isNodeConnected, setJwtToken , API_BASE_URL]);
+
+  const copyText = useCallback((text) => {
+    navigator.clipboard.writeText(text).then(() => {
+      alert(`Copied: ${text}`);
+    });
+  }, []);
+
+  const shareReferral = useCallback(async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Join S.AI',
+          text: 'Join NexusAI using my referral link!',
+          url: referralLink,
+        });
+      } catch (err) {
+        console.error('Error sharing referral:', err);
+      }
+    } else {
+      console.warn('Navigator share not supported');
+      alert('Sharing not supported. Please copy the link.');
+    }
+  }, [referralLink]);
+
+  const generateChartLabels = useCallback(() => {
+    const labels = [];
+    const today = new Date();
+    for (let i = 13; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(today.getDate() - i);
+      const day = date.getDate().toString().padStart(2, '0');
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const year = date.getFullYear();
+      labels.push(`${day}/${month}/${year}`);
+    }
+    return labels;
+  }, []);
+
+  const chartData = useMemo(() => {
+    return {
+      labels: generateChartLabels(),
+      datasets: [
+        {
+          label: 'Daily Points',
+          data: dailyPoints,
+          backgroundColor: 'rgba(255, 255, 255, 0.2)',
+          borderColor: '#fff',
+          borderWidth: 1,
+          barThickness: 10,
+        },
+      ],
+    };
+  }, [dailyPoints, generateChartLabels]);
+
+  const chartOptions = {
+    maintainAspectRatio: false,
+    scales: {
+      y: {
+        type: 'linear',
+        beginAtZero: true,
+        title: { display: true, text: 'Points', color: '#fff', font: { size: 12 } },
+        ticks: { color: '#e0e0e0', font: { size: 10 } },
+        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+      },
+      x: {
+        type: 'category',
+        title: { display: true, text: 'Days', color: '#fff', font: { size: 12 } },
+        ticks: { color: '#e0e0e0', font: { size: 10 } },
+        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+      },
+    },
+    plugins: {
+      legend: { labels: { color: '#fff', font: { size: 10 } } },
+    },
+  };
+
+  const renderTabs = useCallback(() => {
+    return (
+      <div className="tabs">
+        {tabs.map((tab) => (
+          <div
+            key={tab.id}
+            className={`tab ${activeTab === tab.id ? 'active' : ''}`}
+            onClick={() => {
+              setActiveTab(tab.id);
+            }}
+          >
+            {tab.label}
+          </div>
+        ))}
+      </div>
+    );
+  }, [activeTab]);
+
+
+  const renderContent = useCallback(() => {
+    switch (activeTab) {
+      case 'profile':
+        return (
+          <div className="tab-content active">
+            <h2>Profile</h2>
+            {error && !isLoading && <div className="error-message">{error}</div>} {/* Chỉ hiển thị lỗi khi không loading */}
+            <div className="profile-cards">
+              <div className="profile-card">
+                <h3>Current Tier</h3>
+                <div className="card-content">
+                  <div className="tier-image">
+                    <img
+                      src={`/${currentTier.toLowerCase().replace(' ', '')}.png`}
+                      alt={`${currentTier} logo`}
+                      onError={(e) => (e.target.src = '/none.png')}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="profile-card">
+                <h3>Total Season 1 Points</h3>
+                <div className="card-content">
+                  <span className="card-value">{totalPoints}</span>
+                </div>
+              </div>
+              <div className="profile-card">
+                <h3>{`Today's Points`}</h3>
+                <div className="card-content">
+                  <span className="card-value">{todayPoints}</span>
+                </div>
+              </div>
+            </div>
+            <div className="social-tables">
+              <div className="social-table solana">
+                <h3>Solana Wallet</h3>
+                {solanaConnected ? (
+                  <div className="social-content">
+                    <span className="social-status">Connected</span>
+                    <span className="social-handle">
+                      {walletAddress.slice(0, 4)}...{walletAddress.slice(-4)}
+                    </span>
+                  </div>
+                ) : (
+                  <WalletMultiButton />
+                )}
+              </div>
+              <div className="social-table discord">
+                <h3>Discord</h3>
+                {isLoading ? (
+                  <div className="loading-message">Đang xử lý...</div>
+                ) : discordConnected ? (
+                  <div className="social-content">
+                    <span className="social-status">Connected</span>
+                    <span className="social-handle">Username: {discordUsername}</span>
+                    <div className="button-group">
+                      <button className="disconnect-button" onClick={disconnectDiscord}>
+                        Disconnect
+                      </button>
+                      <button
+                        className="update-roles-button"
+                        onClick={updateDiscordRoles}
+                        disabled={isUpdatingRoles}
+                      >
+                        {isUpdatingRoles ? 'Updating...' : 'Reload role'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button className="connect-button" onClick={connectDiscord}>
+                    Connect Discord
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      case 'nodes':
+        return (
+          <div className="tab-content active">
+            <h2>Nodes</h2>
+            <div className="nodes-container">
+              <div className="chart-container">
+                <Bar data={chartData} options={chartOptions} />
+              </div>
+              <div className="nodes-tables">
+                <div className="points-table">
+                  <h3>Points Summary</h3>
+                  <div className="summary-content">
+                    <span className="summary-label">Total Season 1 Points:</span>
+                    <span className="stat-box">{totalPoints}</span>
+                    <span className="summary-label">Today's Points:</span>
+                    <span className="stat-box">{todayPoints}</span>
+                  </div>
+                </div>
+                <div className="connection-table">
+                  <h3>Connection Summary</h3>
+                  <div className="summary-content">
+                    <span className="summary-label">Total Hours Today:</span>
+                    <span className="stat-box">{hoursToday.toFixed(2)}</span>
+                    <span className="summary-label">Total Days Season 1:</span>
+                    <span className="stat-box">{daysSeason1}</span>
+                  </div>
+                </div>
+                <div className="connect-table">
+                  <h3>Wallet Status</h3>
+                  <div className="connect-status">{isNodeConnected ? 'Connected' : 'Disconnected'}</div>
+                  <div className="network-icon">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div key={i} className={`network-bar ${i <= networkStrength ? 'active' : ''}`}></div>
+                    ))}
+                  </div>
+                  <div className="network-text">
+                    Network Status: {networkStrength > 0 ? `Connected (${networkStrength}/4)` : 'Disconnected'}
+                  </div>
+                  <button className={`connect-button ${isNodeConnected ? 'disconnect' : 'connect'}`}
+                    onClick={toggleNodeConnection}>
+                    {isNodeConnected ? 'Disconnect' : 'Connect'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      case 'referrals':
+        return (
+          <div className="tab-content active">
+            <h2>Referrals</h2>
+            <div className="referral-container">
+              <div className="referral-main">
+                <h3>Referral Info</h3>
+                <div className="referral-input-container">
+                  <input type="text" className="referral-input" value={referralCode} readOnly />
+                  <button
+                    className="referral-input-button copy-code"
+                    onClick={() => copyText(referralCode)}
+                  >
+                    Copy Code
+                  </button>
+                </div>
+                <div className="referral-input-container">
+                  <input type="text" className="referral-input" value={referralLink} readOnly />
+                  <button
+                    className="referral-input-button copy-link"
+                    onClick={() => copyText(referralLink)}
+                  >
+                    Copy Link
+                  </button>
+                  <button className="referral-input-button share" onClick={shareReferral}>
+                    Share
+                  </button>
+                </div>
+                <div className="summary-row">
+                  <span className="summary-label">Total Referrals:</span>
+                  <span className="summary-value">{referralsCount}</span>
+                </div>
+                <h3>Referral Ranking</h3>
+                <div className="search-container">
+                  <input
+                    type="text"
+                    className="search-input"
+                    placeholder="Search wallet..."
+                    value={referralSearch}
+                    onChange={(e) => {
+                      setReferralSearch(e.target.value);
+                      setReferralPage(1);
+                    }}
+                  />
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Rank</th>
+                      <th>Wallet</th>
+                      <th>Referrals (100 points/ref)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const sortedData = [...referralRanking].sort((a, b) => b.referrals - a.referrals);
+                      const filteredData = sortedData.filter((entry) =>
+                        entry.wallet.toLowerCase().includes(referralSearch.toLowerCase())
+                      );
+                      const start = (referralPage - 1) * itemsPerPage;
+                      const end = start + itemsPerPage;
+                      const paginatedData = filteredData.slice(start, end);
+                      return paginatedData.length > 0 ? (
+                        paginatedData.map((entry, _) => {
+                          const globalIndex = sortedData.indexOf(entry);
+                          const rank = globalIndex + 1;
+                          return (
+                            <tr
+                              key={entry.wallet}
+                              className={rank === 1 ? 'top-1' : rank === 2 ? 'top-2' : rank === 3 ? 'top-3' : ''}
+                            >
+                              <td>{rank}</td>
+                              <td>{`${entry.wallet.slice(0, 4)}...${entry.wallet.slice(-4)}`}</td>
+                              <td>{entry.referrals}</td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan="3">No ranking data available</td>
+                        </tr>
+                      );
+                    })()}
+                  </tbody>
+                </table>
+                <div className="pagination">
+                  <button
+                    className="pagination-button"
+                    onClick={() => setReferralPage((prev) => Math.max(1, prev - 1))}
+                    disabled={referralPage === 1}
+                  >
+                    Previous
+                  </button>
+                  <button
+                    className="pagination-button"
+                    onClick={() => setReferralPage((prev) => prev + 1)}
+                    disabled={referralRanking.length <= referralPage * itemsPerPage}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      case 'leaderboard':
+        return (
+          <div className="tab-content active">
+            <h2>Leaderboard</h2>
+            <div className="tier-info">
+              <h3>Tier Info</h3>
+              <div className="tier-list">
+                {[
+                  { tier: 'Tier 1', points: 100, logo: '/tier1.png' },
+                  { tier: 'Tier 2', points: 500, logo: '/tier2.png' },
+                  { tier: 'Tier 3', points: 1000, logo: '/tier3.png' },
+                  { tier: 'Tier 4', points: 5000, logo: '/tier4.png' },
+                  { tier: 'Tier 5', points: 10000, logo: '/tier5.png' },
+                ].map((tier) => (
+                  <div key={tier.tier} className="tier-item">
+                    <div className="tier-image">
+                      <img src={tier.logo} alt={`${tier.tier} logo`} />
+                    </div>
+                    <div className="tier-details">
+                      {/* <span className="tier-title">{tier.tier}</span> */}
+                      <span className="tier-points">{tier.points} Points</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="search-container">
+              <input
+                type="text"
+                className="search-input"
+                placeholder="Search wallet..."
+                value={leaderboardSearch}
+                onChange={(e) => {
+                  setLeaderboardSearch(e.target.value);
+                  setLeaderboardPage(1);
+                }}
+              />
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Wallet</th>
+                  <th>Points</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const sortedData = [...leaderboard].sort((a, b) => b.points - a.points);
+                  const filteredData = sortedData.filter((entry) =>
+                    entry.wallet.toLowerCase().includes(leaderboardSearch.toLowerCase())
+                  );
+                  let userEntry = null;
+                  if (walletAddress) {
+                    userEntry = filteredData.find((entry) => entry.wallet === walletAddress);
+                    if (userEntry) {
+                      filteredData.splice(filteredData.indexOf(userEntry), 1);
+                    }
+                  }
+                  const start = (leaderboardPage - 1) * itemsPerPage;
+                  const end = start + itemsPerPage;
+                  const paginatedData = filteredData.slice(start, end);
+                  const rows = [];
+                  if (userEntry) {
+                    rows.push(
+                      <tr key={userEntry.wallet}>
+                        <td>-</td>
+                        <td>
+                          {`${userEntry.wallet.slice(0, 4)}...${userEntry.wallet.slice(-4)}`}{' '}
+                          <span className="you-indicator">(You)</span>
+                        </td>
+                        <td>{userEntry.points}</td>
+                      </tr>
+                    );
+                  }
+                  paginatedData.forEach((entry, _) => {
+                    const globalIndex = sortedData.indexOf(entry);
+                    const rank = globalIndex + 1;
+                    rows.push(
+                      <tr
+                        key={entry.wallet}
+                        className={rank === 1 ? 'top-1' : rank === 2 ? 'top-2' : rank === 3 ? 'top-3' : ''}
+                      >
+                        <td>{rank}</td>
+                        <td>{`${entry.wallet.slice(0, 4)}...${entry.wallet.slice(-4)}`}</td>
+                        <td>{entry.points}</td>
+                      </tr>
+                    );
+                  });
+                  return rows.length > 0 ? (
+                    rows
+                  ) : (
+                    <tr>
+                      <td colSpan="3">No leaderboard data available</td>
+                    </tr>
+                  );
+                })()}
+              </tbody>
+            </table>
+            <div className="pagination">
+              <button
+                className="pagination-button"
+                onClick={() => setLeaderboardPage((prev) => Math.max(1, prev - 1))}
+                disabled={leaderboardPage === 1}
+              >
+                Previous
+              </button>
+              <button
+                className="pagination-button"
+                onClick={() => setLeaderboardPage((prev) => prev + 1)}
+                disabled={leaderboard.length <= leaderboardPage * itemsPerPage}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        );
+      default:
+        console.warn('Invalid tab:', activeTab);
+        return (
+          <div className="tab-content active">
+            <p>Invalid tab selected</p>
+          </div>
+        );
+    }
+  }, [
+    activeTab,
+    totalPoints,
+    todayPoints,
+    hoursToday,
+    daysSeason1,
+    referralsCount,
+    currentTier,
+    isNodeConnected,
+    networkStrength,
+    referralCode,
+    referralLink,
+    referralRanking,
+    leaderboard,
+    referralPage,
+    leaderboardPage,
+    referralSearch,
+    leaderboardSearch,
+    walletAddress,
+    chartData,
+    toggleNodeConnection,
+    copyText,
+    shareReferral,
+    solanaConnected,
+    discordConnected,
+    discordUsername,
+    publicKey,
+    error,
+    connectAndSignWallet,
+    disconnectSolana,
+    connectDiscord,
+    disconnectDiscord,
+    updateDiscordRoles,
+    isUpdatingRoles,
+  ]);
+
+  useEffect(() => {
+    const initParticleAnimation = () => {
+      const canvas = document.getElementById('particleCanvas');
+      if (!canvas || !window.THREE) {
+        console.warn('No particleCanvas or Three.js not loaded');
+        return () => { }; // Trả về hàm rỗng nếu không khởi tạo được
+      }
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer({ canvas, alpha: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+
+      const sphereGeometry = new THREE.SphereGeometry(5, 32, 32);
+      const wireframeMaterial = new THREE.MeshBasicMaterial({
+        color: 0xe0e0e0,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.3,
+      });
+      const sphere = new THREE.Mesh(sphereGeometry, wireframeMaterial);
+      scene.add(sphere);
+
+      const particleCount = 100;
+      const particlesGeometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(particleCount * 3);
+      const colors = new Float32Array(particleCount * 3);
+
+      for (let i = 0; i < particleCount; i++) {
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        const r = 5 + (Math.random() - 0.5) * 0.2;
+        positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+        positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+        positions[i * 3 + 2] = r * Math.cos(phi);
+        colors[i * 3] = 0.9 + Math.random() * 0.1;
+        colors[i * 3 + 1] = 0.9 + Math.random() * 0.1;
+        colors[i * 3 + 2] = 0.9 + Math.random() * 0.1;
+      }
+
+      particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      particlesGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+      const particleMaterial = new THREE.PointsMaterial({
+        size: 0.1,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.8,
+        blending: THREE.AdditiveBlending,
+      });
+
+      const particles = new THREE.Points(particlesGeometry, particleMaterial);
+      scene.add(particles);
+
+      camera.position.z = 10;
+
+      const animate = () => {
+        requestAnimationFrame(animate);
+        sphere.rotation.y += 0.002;
+        particles.rotation.y += 0.002;
+        for (let i = 0; i < particleCount; i++) {
+          const i3 = i * 3;
+          const x = particlesGeometry.attributes.position.array[i3];
+          const y = particlesGeometry.attributes.position.array[i3 + 1];
+          const z = particlesGeometry.attributes.position.array[i3 + 2];
+          const r = Math.sqrt(x * x + y * y + z * z);
+          particlesGeometry.attributes.position.array[i3 + 1] += Math.sin(Date.now() * 0.001 + i) * 0.01;
+          particlesGeometry.attributes.position.array[i3] = r * Math.sin(Math.acos(z / r));
+        }
+        particlesGeometry.attributes.position.needsUpdate = true;
+        renderer.render(scene, camera);
+      };
+      animate();
+
+      const resizeCanvas = () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      };
+      window.addEventListener('resize', resizeCanvas);
+
+      const loginContainer = document.getElementById('loginContainer');
+      if (loginContainer) {
+        const observer = new MutationObserver(() => {
+          if (loginContainer.style.display === 'none') {
+            renderer.setAnimationLoop(null);
+          } else {
+            renderer.setAnimationLoop(animate);
+          }
+        });
+        observer.observe(loginContainer, { attributes: true, attributeFilter: ['style'] });
+      }
+
+      return () => {
+        window.removeEventListener('resize', resizeCanvas);
+        renderer.setAnimationLoop(null);
+        renderer.dispose();
+        if (loginContainer && observer) {
+          observer.disconnect();
+        }
+      };
+    };
+
+    const cleanupParticle = initParticleAnimation() || (() => { }); // Đảm bảo cleanupParticle là hàm
+
+    if (!socketRef.current) {
+      socketRef.current = io(SOCKET_URL, {
+        reconnectionAttempts: 5,
+        transports: ['websocket', 'polling'],
+        withCredentials: true,
+      });
+
+      socketRef.current.on('connect', () => {
+        if (isConnected && walletAddress) {
+          socketRef.current.emit('join', walletAddress);
+        }
+      });
+
+      socketRef.current.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
+        setError('Failed to connect to server. Please try again later.');
+      });
+
+      socketRef.current.on('points-update', (data) => {
+        setTotalPoints(data.totalPoints || 0);
+        setTodayPoints(data.todayPoints || 0);
+        setHoursToday(data.hoursToday || 0);
+        setDaysSeason1(data.daysSeason1 || 0);
+        setReferralsCount(data.referralsCount || 0);
+        setCurrentTier(data.currentTier || 'None');
+        setNetworkStrength(data.networkStrength || 0);
+        setIsNodeConnected(data.networkStrength > 0);
+        setDailyPoints(data.dailyPoints || Array(14).fill(0));
+      });
+
+      socketRef.current.on('leaderboard-update', () => {
+        fetchLeaderboard();
+      });
+    }
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+      if (typeof cleanupParticle === 'function') {
+        cleanupParticle(); // Chỉ gọi nếu là hàm
+      }
+    };
+  }, [isConnected, walletAddress, fetchLeaderboard]);
+
+  useEffect(() => {
+    const initialize = async () => {
+      const token = getJwt();
+      if (token && publicKey && connected && !isConnected && !signedRef.current) {
+        setIsConnected(true);
+        setWalletAddress(publicKey.toString());
+        setSolanaConnected(true);
+        setConnectedWallet({ publicKey });
+        fetchReferralInfo(publicKey.toString());
+        fetchReferralRanking();
+        fetchLeaderboard();
+        fetchUserStats();
+        signedRef.current = true;
+        if (socketRef.current) {
+          socketRef.current.emit('join', publicKey.toString());
+        }
+      }
+
+      if (
+        publicKey &&
+        connected &&
+        !isConnected &&
+        !isSigning &&
+        canSignWallet() &&
+        !showReferralInput &&
+        !signedRef.current
+      ) {
+        await connectAndSignWallet();
+      }
+
+      setIsInitializing(false); // Hoàn tất khởi tạo
+    };
+
+    initialize();
+  }, [
+    publicKey,
+    connected,
+    isConnected,
+    isSigning,
+    showReferralInput,
+    connectAndSignWallet,
+    fetchReferralInfo,
+    fetchReferralRanking,
+    fetchLeaderboard,
+    fetchUserStats,
+    getJwt,
+    canSignWallet,
+  ]);
+
+  return (
+    <div className="dashboard-wrapper">
+      <Head>
+        <title>S.AI Dashboard</title>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="description" content="S.AI Dashboard on app.sailabs.xyz" />
+        <link rel="icon" href="/favicon.ico" />
+      </Head>
+      <header>
+        <div className="logo">
+          <img src="/logo.png" alt="Logo" />
+        </div>
+        {isConnected && (
+          <div className="user-info">
+            <span className="user-wallet">
+              {walletAddress.slice(0, 4)}...{walletAddress.slice(-4)}
+            </span>
+            <button className="logout-button" onClick={logout}>
+              Logout
+            </button>
+          </div>
+        )}
+      </header>
+      {isInitializing ? (
+        <div className="loading-container">
+          <div className="loading-message">Đang khởi tạo...</div>
+        </div>
+      ) : !isConnected ? (
+        <div
+          id="loginContainer"
+          className="login-container"
+          style={{ display: 'flex' }}
+        >
+          <canvas id="particleCanvas" className="particle-canvas"></canvas>
+          <div className="login-box">
+            <h2>Sign In</h2>
+            {showReferralInput ? (
+              <div className="referral-code-container">
+                <div className="referral-code-input-wrapper">
+                  {[0, 1, 2, 3, 4, 5].map((index) => (
+                    <input
+                      key={index}
+                      type="text"
+                      className="referral-code-input"
+                      value={referralCodeInput[index]}
+                      onChange={(e) => handleReferralInputChange(index, e.target.value)}
+                      onKeyDown={(e) => handleReferralKeyDown(index, e)}
+                      maxLength={1}
+                      ref={(el) => (inputRefs.current[index] = el)}
+                    />
+                  ))}
+                </div>
+                {referralError && <div className="referral-error">{referralError}</div>}
+                <div className="referral-buttons-wrapper">
+                  <button className="referral-submit-button" onClick={handleReferralSubmit}>
+                    Submit
+                  </button>
+                  <button className="referral-skip-button" onClick={handleReferralSkip}>
+                    Skip
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="login-buttons">
+                {isSigning ? (
+                  <div className="loading-message">Signing wallet, please wait...</div>
+                ) : (
+                  <WalletMultiButton />
+                )}
+                {error && !isLoading && <div className="error-message">{error}</div>}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="dashboard-container" style={{ display: 'flex' }}>
+          {renderTabs()}
+          {renderContent()}
+        </div>
+      )}
+      <footer>
+        <div className="footer-links">
+          <a href="https://x.com/sailabs_">Twitter</a>
+          <a href="#discord">Discord</a>
+          <a href="index.html">Website</a>
+        </div>
+      </footer>
+    </div>
+  );
+}
