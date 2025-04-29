@@ -592,18 +592,21 @@ export default function Home() {
       
       <header>
   <div className="logo">
-    <image src="/logo.png" alt="S.AI Logo" width={100} height={50} loading="lazy" />
+    <Image src="/logo.png" alt="S.AI Logo" width={100} height={50} loading="lazy" />
   </div>
   <div className="menu">
     <div className="social-icons">
       <a href="https://x.com/sailabs_" target="_blank" rel="noopener noreferrer">
-        <image src="/twitter.png" alt="Twitter" className="social-icon" loading="lazy" />
+        <Image src="/twitter.png" alt="Twitter" className="social-icon" width={100}
+  height={50} loading="lazy" />
       </a>
       <a href="https://discord.com" target="_blank" rel="noopener noreferrer">
-        <image src="/discord.png" alt="Discord" className="social-icon" loading="lazy" />
+        <Image src="/discord.png" alt="Discord" className="social-icon" width={100}
+  height={50} loading="lazy" />
       </a>
       <a href="https://telegram.org" target="_blank" rel="noopener noreferrer">
-        <image src="/telegram.png" alt="Telegram" className="social-icon" loading="lazy" />
+        <Image src="/telegram.png" alt="Telegram" className="social-icon" width={100}
+  height={50} loading="lazy" />
       </a>
     </div>
     <a href={process.env.NEXT_PUBLIC_DASHBOARD_URL} target="_blank" rel="noopener noreferrer">
