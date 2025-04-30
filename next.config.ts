@@ -1,5 +1,6 @@
-/** @type {import('next').NextConfig} */
 module.exports = {
+  basePath: '', // Đảm bảo không có basePath cố định
+  assetPrefix: '', // Để trống để tài nguyên tải từ domain hiện tại
   async rewrites() {
     return [
       {
@@ -14,7 +15,7 @@ module.exports = {
       },
     ];
   },
-  domains: ['app.sailabs.xyz', 'sailabs.xyz'],
+  domains: ['sailabs.xyz', 'app.sailabs.xyz'],
   eslint: {
     ignoreDuringBuilds: true, // Tạm thời bỏ qua ESLint khi build
   },

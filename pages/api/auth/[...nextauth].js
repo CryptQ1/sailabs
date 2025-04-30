@@ -21,11 +21,9 @@ export default NextAuth({
   ],
   callbacks: {
     async session({ session, token }) {
-      // Lưu Discord user ID vào session
       session.user.discordId = token.sub;
-      session.user.id = token.sub; // Giữ lại để tương thích với mã cũ
+      session.user.id = token.sub;
 
-      // Truy vấn publicKey liên kết với discordId
       try {
         const row = await new Promise((resolve, reject) => {
           db.get(
@@ -46,19 +44,17 @@ export default NextAuth({
       return session;
     },
     async jwt({ token, account }) {
-      // Lưu Discord user ID vào token khi đăng nhập
       if (account?.provider === 'discord') {
-        token.sub = account.providerAccountId; // Discord user ID
+        token.sub = account.providerAccountId;
       }
       return token;
     },
     async signIn({ user, account }) {
-      console.log('SignIn:', { user, account });
+      console.log('SignIn callback:', { user, account });
       if (account.provider === 'discord') {
         const discordId = user.id;
 
         try {
-          // Kiểm tra xem discordId đã được liên kết với publicKey chưa
           const existingUser = await new Promise((resolve, reject) => {
             db.get(
               `SELECT publicKey FROM users WHERE discordId = ?`,
@@ -71,7 +67,6 @@ export default NextAuth({
           });
 
           if (!existingUser) {
-            // Nếu chưa có, tạo bản ghi mới nhưng không lưu access_token/refresh_token
             await new Promise((resolve, reject) => {
               db.run(
                 `INSERT OR IGNORE INTO users (discordId) VALUES (?)`,
@@ -83,7 +78,6 @@ export default NextAuth({
               );
             });
           } else {
-            // Nếu đã có, cập nhật discordId (tránh lưu access_token/refresh_token nếu không cần)
             await new Promise((resolve, reject) => {
               db.run(
                 `UPDATE users SET discordId = ? WHERE discordId = ?`,
@@ -104,16 +98,20 @@ export default NextAuth({
       }
       return true;
     },
+    async signOut({ token }) {
+      console.log('SignOut callback:', { token });
+      return true; // Ngăn gửi yêu cầu logout đến Discord API
+    },
   },
-  secret: process.env.JWT_SECRET,
+  secret: process.env.NEXTAUTH_SECRET,
   session: {
     strategy: 'jwt',
-    maxAge: 24 * 60 * 60, // Phiên hết hạn sau 24 giờ, đồng bộ với JWT trong server.js
+    maxAge: 24 * 60 * 60,
   },
   pages: {
-    signIn: '/dashboard', // Quay lại dashboard sau khi đăng nhập Discord
-    signOut: '/dashboard', // Quay lại dashboard sau khi đăng xuất
-    error: '/dashboard', // Quay lại dashboard nếu có lỗi
+    signIn: '/dashboard',
+    signOut: '/dashboard',
+    error: '/dashboard',
   },
   events: {
     async signIn({ user }) {

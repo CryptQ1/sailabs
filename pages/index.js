@@ -7,13 +7,12 @@ import Image from 'next/image';
 
 export default function Home() {
 
-  // Handle Light Node button click
   const handleLightNodeClick = () => {
     window.open(process.env.NEXT_PUBLIC_DASHBOARD_URL, '_blank');
   };
 
   const [currentIndex, setCurrentIndex] = useState(0);
-  const items = [0, 1, 2]; // 3 items for carousel
+  const items = [0, 1, 2]; 
 
   const handlePrevClick = () => {
     setCurrentIndex((prevIndex) => (prevIndex === 0 ? items.length - 1 : prevIndex - 1));
@@ -597,16 +596,13 @@ export default function Home() {
   <div className="menu">
     <div className="social-icons">
       <a href="https://x.com/sailabs_" target="_blank" rel="noopener noreferrer">
-        <Image src="/twitter.png" alt="Twitter" className="social-icon" width={100}
-  height={50} loading="lazy" />
+        <img src="/twitter.png" alt="Twitter" className="social-icon" loading="lazy" />
       </a>
       <a href="https://discord.com" target="_blank" rel="noopener noreferrer">
-        <Image src="/discord.png" alt="Discord" className="social-icon" width={100}
-  height={50} loading="lazy" />
+        <img src="/discord.png" alt="Discord" className="social-icon" loading="lazy" />
       </a>
       <a href="https://telegram.org" target="_blank" rel="noopener noreferrer">
-        <Image src="/telegram.png" alt="Telegram" className="social-icon" width={100}
-  height={50} loading="lazy" />
+        <img src="/telegram.png" alt="Telegram" className="social-icon" loading="lazy" />
       </a>
     </div>
     <a href={process.env.NEXT_PUBLIC_DASHBOARD_URL} target="_blank" rel="noopener noreferrer">

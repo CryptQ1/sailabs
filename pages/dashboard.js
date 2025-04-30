@@ -7,6 +7,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { signIn, signOut, useSession } from 'next-auth/react';
 import { getSession } from 'next-auth/react';
+import Image from 'next/image';
 
 const Bar = dynamic(() => import('react-chartjs-2').then((mod) => mod.Bar), { ssr: false });
 import { Chart, LinearScale, CategoryScale, BarElement, Tooltip, Legend } from 'chart.js';
@@ -108,7 +109,7 @@ export default function Dashboard() {
     const token = getJwt();
     if (!token) {
       console.error('No JWT token available for endpoint:', endpoint);
-      setError('Vui lòng đăng nhập lại');
+      setError('Please log in again');
       return null;
     }
     const headers = {
@@ -123,7 +124,7 @@ export default function Dashboard() {
         const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
         if (response.status === 401) {
           console.error('Unauthorized error for', endpoint);
-          setError('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+          setError('Your session has expired. Please log in again.');
           setJwt(null);
           if (checkStorageAccess()) {
             localStorage.removeItem('jwt');
@@ -133,7 +134,7 @@ export default function Dashboard() {
         }
         if (response.status === 403) {
           console.error('Forbidden error for', endpoint);
-          setError('Không có quyền truy cập. Vui lòng thử lại.');
+          setError('No access. Please try again.');
           return null; // Không reload trang
         }
         if (!response.ok) {
@@ -144,7 +145,7 @@ export default function Dashboard() {
       } catch (error) {
         console.error('Fetch attempt', i + 1, 'failed for', endpoint, ':', error.message);
         if (i === retries - 1) {
-          setError('Lỗi kết nối máy chủ. Vui lòng thử lại.');
+          setError('Server connection error. Please try again.');
           return null;
         }
         await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -157,7 +158,6 @@ export default function Dashboard() {
     if (status === 'authenticated' && session?.user?.discordId) {
       setDiscordConnected(true);
       setDiscordUsername(session.user.name || 'Discord User');
-      // Không tự động gọi /api/update-discord-id nữa
     } else {
       setDiscordConnected(false);
       setDiscordUsername('');
@@ -256,19 +256,27 @@ export default function Dashboard() {
 
   const connectDiscord = useCallback(async () => {
     if (!publicKey) {
-      setError('Vui lòng kết nối ví Solana trước');
+      setError('Please connect Solana wallet first.');
       return;
     }
     setIsLoading(true);
     setError('');
-
+  
     try {
+      // Xóa phiên Discord cũ nếu có
+      const currentSession = await getSession();
+      if (currentSession?.user?.discordId) {
+        console.log('Existing Discord session found, signing out...');
+        await signOut({ redirect: false });
+      }
+  
+      // Gọi signIn
       const result = await signIn('discord', { redirect: false });
       if (result.error) {
-        console.log('SignIn returned temporary error, continuing:', result.error);
+        console.warn('SignIn returned temporary error, continuing:', result.error);
       }
-
-      const checkSession = async (maxAttempts = 5, delay = 1000) => {
+  
+      const checkSession = async (maxAttempts = 3, delay = 500) => {
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
           const currentSession = await getSession();
           if (currentSession?.user?.discordId) {
@@ -279,7 +287,7 @@ export default function Dashboard() {
             });
             if (!response?.success) {
               console.error('Failed to link Discord:', response?.error);
-              setError(response?.error || 'Không thể liên kết tài khoản Discord');
+              setError(response?.error || 'Unable to link Discord account');
               setDiscordConnected(false);
               setDiscordUsername('');
               await signOut({ redirect: false });
@@ -287,7 +295,6 @@ export default function Dashboard() {
               setDiscordConnected(true);
               setDiscordUsername(currentSession.user.name || 'Discord User');
               setError('');
-              // Đảm bảo isConnected được đặt nếu ví đã được ký
               const token = getJwt();
               if (token && publicKey && connected && !isConnected) {
                 setIsConnected(true);
@@ -307,15 +314,15 @@ export default function Dashboard() {
         }
         return false;
       };
-
+  
       const sessionFound = await checkSession();
       if (!sessionFound) {
         console.error('Session not found after retries');
-        setError('Không thể lấy thông tin Discord. Vui lòng thử lại.');
+        setError('Unable to get Discord information. Please try again.');
       }
     } catch (error) {
       console.error('Critical error connecting Discord:', error);
-      setError(error.message || 'Không thể kết nối Discord');
+      setError(error.message || 'Cannot connect to Discord');
     } finally {
       setIsLoading(false);
     }
@@ -323,7 +330,7 @@ export default function Dashboard() {
 
   const disconnectDiscord = useCallback(async () => {
     if (!publicKey) {
-      setError('Vui lòng kết nối ví Solana trước');
+      setError('Please connect Solana wallet first');
       return;
     }
     setIsLoading(true);
@@ -333,7 +340,7 @@ export default function Dashboard() {
         publicKey: publicKey.toString(),
       });
       if (!response?.success) {
-        throw new Error(response?.error || 'Không thể ngắt kết nối Discord');
+        throw new Error(response?.error || 'Can not disconnect from Discord');
       }
       await signOut({ redirect: false });
       setDiscordConnected(false);
@@ -342,7 +349,7 @@ export default function Dashboard() {
       console.log('Discord disconnected successfully');
     } catch (error) {
       console.error('Error disconnecting Discord:', error);
-      setError(error.message || 'Không thể ngắt kết nối Discord');
+      setError(error.message || 'Can not disconnect from Discord');
     } finally {
       setIsLoading(false);
     }
@@ -350,7 +357,7 @@ export default function Dashboard() {
 
   const updateDiscordRoles = useCallback(async () => {
     if (!discordConnected || !publicKey) {
-      setError('Vui lòng kết nối ví Solana và Discord trước');
+      setError('Please connect Solana wallet and Discord first');
       return;
     }
     setIsUpdatingRoles(true);
@@ -361,11 +368,11 @@ export default function Dashboard() {
       if (response.success) {
         alert('Discord role update request successful!');
       } else {
-        throw new Error(response.error || 'Không thể cập nhật vai trò');
+        throw new Error(response.error || 'Unable to update role');
       }
     } catch (error) {
       console.error('Error updating Discord roles:', error);
-      setError('Không thể cập nhật vai trò Discord');
+      setError('Unable to update Discord role');
     } finally {
       setIsUpdatingRoles(false);
     }
@@ -404,7 +411,7 @@ export default function Dashboard() {
       return;
     }
     if (code.length !== 6) {
-      setReferralError('Mã mời phải có 6 ký tự!');
+      setReferralError('Invalid invitation code !');
       return;
     }
 
@@ -418,7 +425,7 @@ export default function Dashboard() {
       if (!response.ok) {
         const text = await response.text();
         console.error('Non-JSON response from /referrals/validate:', text);
-        setReferralError('Lỗi khi kiểm tra mã mời. Vui lòng thử lại.');
+        setReferralError('Error checking invitation code. Please try again.');
         return;
       }
 
@@ -427,11 +434,11 @@ export default function Dashboard() {
         setShowReferralInput(false);
         setReferralError('');
       } else {
-        setReferralError('Mã mời không hợp lệ hoặc đã được sử dụng.');
+        setReferralError('The invitation code is invalid or has already been used.');
       }
     } catch (error) {
       console.error('Error validating referral code:', error);
-      setReferralError('Lỗi khi kiểm tra mã mời. Vui lòng thử lại.');
+      setReferralError('Error checking invitation code. Please try again.');
     }
   }, [referralCodeInput]);
 
@@ -467,7 +474,7 @@ export default function Dashboard() {
         signed = await signMessage(encodedMessage);
       } catch (error) {
         console.error('Error signing message:', error);
-        setError('Bạn đã hủy xác nhận ví. Vui lòng thử lại!');
+        setError('You have unsigned your wallet. Please try again!');
         setIsSigning(false);
         return;
       }
@@ -487,7 +494,7 @@ export default function Dashboard() {
         });
       } catch (error) {
         console.error('Fetch error:', error);
-        setError('Không thể kết nối tới server. Vui lòng kiểm tra kết nối mạng và thử lại.');
+        setError('Unable to connect to server. Please check your network connection and try again.');
         setIsSigning(false);
         return;
       }
@@ -495,7 +502,7 @@ export default function Dashboard() {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Server error:', response.status, errorText);
-        setError(`Lỗi server: ${errorText || 'Không thể xác thực ví. Vui lòng thử lại.'}`);
+        setError(`Lỗi server: ${errorText || 'Unable to verify wallet. Please try again.'}`);
         setIsSigning(false);
         return;
       }
@@ -522,7 +529,7 @@ export default function Dashboard() {
       }
     } catch (error) {
       console.error('Error connecting or signing wallet:', error);
-      setError(error.message || 'Xác thực thất bại. Vui lòng thử lại.');
+      setError(error.message || 'Authentication failed. Please try again.');
     } finally {
       setIsSigning(false);
     }
@@ -560,6 +567,9 @@ export default function Dashboard() {
     if (connectedWallet) {
       disconnectSolana();
     }
+    signOut({ redirect: false }).catch((err) => {
+      console.error('Error signing out Discord:', err);
+    });
     setIsConnected(false);
     setWalletAddress('');
     setConnectedWallet(null);
@@ -596,7 +606,7 @@ export default function Dashboard() {
       socketRef.current.emit('node-disconnect');
       socketRef.current.disconnect();
     }
-  }, [checkStorageAccess, connectedWallet, disconnectSolana , API_BASE_URL]);
+  }, [checkStorageAccess, connectedWallet, disconnectSolana]);
 
   const toggleNodeConnection = useCallback(async () => {
     if (!connectedWallet || !publicKey) {
@@ -743,7 +753,7 @@ export default function Dashboard() {
         return (
           <div className="tab-content active">
             <h2>Profile</h2>
-            {error && !isLoading && <div className="error-message">{error}</div>} {/* Chỉ hiển thị lỗi khi không loading */}
+            {error && !isLoading && <div className="error-message">{error}</div>} 
             <div className="profile-cards">
               <div className="profile-card">
                 <h3>Current Tier</h3>
@@ -787,7 +797,7 @@ export default function Dashboard() {
               <div className="social-table discord">
                 <h3>Discord</h3>
                 {isLoading ? (
-                  <div className="loading-message">Đang xử lý...</div>
+                  <div className="loading-message">loading...</div>
                 ) : discordConnected ? (
                   <div className="social-content">
                     <span className="social-status">Connected</span>
@@ -984,8 +994,7 @@ export default function Dashboard() {
                     <div className="tier-image">
                       <img src={tier.logo} alt={`${tier.tier} logo`} />
                     </div>
-                    <div className="tier-details">
-                      {/* <span className="tier-title">{tier.tier}</span> */}
+                    <div className="tier-details">                     
                       <span className="tier-points">{tier.points} Points</span>
                     </div>
                   </div>
@@ -1132,15 +1141,15 @@ export default function Dashboard() {
       const canvas = document.getElementById('particleCanvas');
       if (!canvas || !window.THREE) {
         console.warn('No particleCanvas or Three.js not loaded');
-        return () => { }; // Trả về hàm rỗng nếu không khởi tạo được
+        return () => {}; 
       }
-
+    
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
       const renderer = new THREE.WebGLRenderer({ canvas, alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.setPixelRatio(window.devicePixelRatio);
-
+    
       const sphereGeometry = new THREE.SphereGeometry(5, 32, 32);
       const wireframeMaterial = new THREE.MeshBasicMaterial({
         color: 0xe0e0e0,
@@ -1150,12 +1159,12 @@ export default function Dashboard() {
       });
       const sphere = new THREE.Mesh(sphereGeometry, wireframeMaterial);
       scene.add(sphere);
-
+    
       const particleCount = 100;
       const particlesGeometry = new THREE.BufferGeometry();
       const positions = new Float32Array(particleCount * 3);
       const colors = new Float32Array(particleCount * 3);
-
+    
       for (let i = 0; i < particleCount; i++) {
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos(2 * Math.random() - 1);
@@ -1167,10 +1176,10 @@ export default function Dashboard() {
         colors[i * 3 + 1] = 0.9 + Math.random() * 0.1;
         colors[i * 3 + 2] = 0.9 + Math.random() * 0.1;
       }
-
+    
       particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
       particlesGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
+    
       const particleMaterial = new THREE.PointsMaterial({
         size: 0.1,
         vertexColors: true,
@@ -1178,12 +1187,12 @@ export default function Dashboard() {
         opacity: 0.8,
         blending: THREE.AdditiveBlending,
       });
-
+    
       const particles = new THREE.Points(particlesGeometry, particleMaterial);
       scene.add(particles);
-
+    
       camera.position.z = 10;
-
+    
       const animate = () => {
         requestAnimationFrame(animate);
         sphere.rotation.y += 0.002;
@@ -1201,17 +1210,19 @@ export default function Dashboard() {
         renderer.render(scene, camera);
       };
       animate();
-
+    
       const resizeCanvas = () => {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
       };
       window.addEventListener('resize', resizeCanvas);
-
+    
       const loginContainer = document.getElementById('loginContainer');
+      let observer = null; 
+    
       if (loginContainer) {
-        const observer = new MutationObserver(() => {
+        observer = new MutationObserver(() => {
           if (loginContainer.style.display === 'none') {
             renderer.setAnimationLoop(null);
           } else {
@@ -1220,18 +1231,18 @@ export default function Dashboard() {
         });
         observer.observe(loginContainer, { attributes: true, attributeFilter: ['style'] });
       }
-
+    
       return () => {
         window.removeEventListener('resize', resizeCanvas);
         renderer.setAnimationLoop(null);
         renderer.dispose();
-        if (loginContainer && observer) {
+        if (observer) { 
           observer.disconnect();
         }
       };
     };
 
-    const cleanupParticle = initParticleAnimation() || (() => { }); // Đảm bảo cleanupParticle là hàm
+    const cleanupParticle = initParticleAnimation() || (() => { });
 
     if (!socketRef.current) {
       socketRef.current = io(SOCKET_URL, {
@@ -1274,7 +1285,7 @@ export default function Dashboard() {
         socketRef.current = null;
       }
       if (typeof cleanupParticle === 'function') {
-        cleanupParticle(); // Chỉ gọi nếu là hàm
+        cleanupParticle(); 
       }
     };
   }, [isConnected, walletAddress, fetchLeaderboard]);
@@ -1309,7 +1320,7 @@ export default function Dashboard() {
         await connectAndSignWallet();
       }
 
-      setIsInitializing(false); // Hoàn tất khởi tạo
+      setIsInitializing(false);
     };
 
     initialize();
@@ -1331,7 +1342,7 @@ export default function Dashboard() {
   return (
     <div className="dashboard-wrapper">
       <Head>
-        <title>S.AI Dashboard</title>
+        <title>S.AI App</title>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta name="description" content="S.AI Dashboard on app.sailabs.xyz" />
@@ -1339,7 +1350,7 @@ export default function Dashboard() {
       </Head>
       <header>
         <div className="logo">
-          <img src="/logo.png" alt="Logo" />
+          <Image src="/logo.png" alt="Logo" width={100} height={50} loading="lazy"/>
         </div>
         {isConnected && (
           <div className="user-info">
@@ -1354,7 +1365,7 @@ export default function Dashboard() {
       </header>
       {isInitializing ? (
         <div className="loading-container">
-          <div className="loading-message">Đang khởi tạo...</div>
+          <div className="loading-message">loading...</div>
         </div>
       ) : !isConnected ? (
         <div
