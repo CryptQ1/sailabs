@@ -21,6 +21,7 @@ export default NextAuth({
   ],
   callbacks: {
     async session({ session, token }) {
+      console.log('Session callback:', { session, token });
       session.user.discordId = token.sub;
       session.user.id = token.sub;
 
@@ -44,6 +45,7 @@ export default NextAuth({
       return session;
     },
     async jwt({ token, account }) {
+      console.log('JWT callback:', { token, account });
       if (account?.provider === 'discord') {
         token.sub = account.providerAccountId;
       }
@@ -93,14 +95,14 @@ export default NextAuth({
           return true;
         } catch (err) {
           console.error('Error during Discord sign-in:', err);
-          return false;
+          return false; // Gây ra lỗi /api/auth/error
         }
       }
       return true;
     },
     async signOut({ token }) {
       console.log('SignOut callback:', { token });
-      return true; // Ngăn gửi yêu cầu logout đến Discord API
+      return true;
     },
   },
   secret: process.env.NEXTAUTH_SECRET,
@@ -111,7 +113,7 @@ export default NextAuth({
   pages: {
     signIn: '/dashboard',
     signOut: '/dashboard',
-    error: '/dashboard',
+    error: '/dashboard', // Chuyển hướng lỗi về dashboard
   },
   events: {
     async signIn({ user }) {
