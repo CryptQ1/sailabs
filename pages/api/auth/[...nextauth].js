@@ -95,7 +95,7 @@ export default NextAuth({
           return true;
         } catch (err) {
           console.error('Error during Discord sign-in:', err);
-          return false; // Gây ra lỗi /api/auth/error
+          return `/dashboard?error=SignInFailed`; // Chuyển hướng với thông báo lỗi
         }
       }
       return true;
@@ -123,4 +123,5 @@ export default NextAuth({
       console.log('User signed out:', session);
     },
   },
+  debug: true, // Bật debug mode
 });
