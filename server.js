@@ -25,11 +25,32 @@ const io = new Server(server, {
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key';
 const REFERRAL_POINTS_PER_USER = 50;
 
+const allowedOrigins = [
+  'https://sailabs.xyz',
+  'https://www.sailabs.xyz',
+  'http://localhost:3000', // Giữ lại để phát triển cục bộ
+  'http://localhost:3001',
+];
+
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001'],
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true,
 }));
+
+io.on('connection', (socket) => {
+  // Cấu hình CORS cho Socket.IO
+  socket.on('connect', () => {
+    console.log('Client connected:', socket.id);
+  });
+});
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/', (req, res) => {
@@ -57,8 +78,8 @@ db.serialize(() => {
       isNodeConnected INTEGER DEFAULT 0,
       usedReferralCode TEXT,
       discordId TEXT
-      discordUsername TEXT,  -- Thêm cột
-      discordAvatar TEXT    -- Thêm cột
+      discordUsername TEXT, 
+      discordAvatar TEXT   
     )`,
     (err) => {
       if (err) console.error('Error creating users table:', err);
@@ -1108,7 +1129,7 @@ app.get('/api/leaderboard', authenticateJWT, (req, res) => {
 // Endpoint to initiate OAuth flow
 app.get('/api/discord/login', authenticateJWT, (req, res) => {
   const publicKey = req.user.publicKey;
-  const redirectUri = encodeURIComponent('http://localhost:3000/api/discord/callback');
+  const redirectUri = encodeURIComponent('https://sailabs.xyz/api/discord/callback');
   const oauthUrl = `https://discord.com/api/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=identify&state=${publicKey}`;
   res.json({ oauthUrl });
 });
@@ -1119,12 +1140,12 @@ app.get('/api/discord/callback', async (req, res) => {
 
   if (error === 'access_denied') {
     console.log('User cancelled Discord OAuth, redirecting to dashboard');
-    return res.redirect('http://localhost:3001/dashboard?discord_error=cancelled&tab=profile');
+    return res.redirect('https://sailabs.xyz/dashboard?discord_linked=true&tab=profile');
   }
 
   if (!code || !publicKey) {
     console.error('Missing code or publicKey in callback:', req.query);
-    return res.redirect('http://localhost:3001/dashboard?discord_error=missing_params&tab=profile');
+    return res.redirect('https://sailabs.xyz/dashboard?discord_error=cancelled&tab=profile');
   }
 
   try {
@@ -1195,6 +1216,7 @@ app.get('/api/discord/callback', async (req, res) => {
   }
 });
 
+const port = process.env.PORT || 3000;
 server.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
 });
