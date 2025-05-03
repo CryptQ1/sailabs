@@ -28,7 +28,7 @@ header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 15px 40px;
+  padding: 10px 20px;
   background: linear-gradient(135deg, rgba(10, 10, 10, 0.9), rgba(30, 58, 138, 0.3));
   backdrop-filter: blur(12px);
   position: fixed;
@@ -223,9 +223,6 @@ header.scrolled {
   position: relative;
   width: 100%;
   min-height: 600px;
-  background: linear-gradient(135deg, rgba(10, 10, 10, 0.9), rgba(30, 58, 138, 0.2));
-  border: 1px solid transparent;
-  border-radius: 16px;
   display: flex;
   align-items: center;
   overflow: hidden;
@@ -323,6 +320,29 @@ header.scrolled {
   100% { transform: translateX(calc(-100% - 320px)); }
 }
 
+/* Matrix Section */
+.matrix-section {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #0A0A0A; /* Đồng bộ với nền chính */
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.matrix-canvas {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  pointer-events: auto;
+}
+
 /* Device Section */
 .device-content {
   max-width: 1000px;
@@ -388,7 +408,7 @@ header.scrolled {
 /* Carousel Section */
 .carousel-section {
   width: 100%;
-  min-height: 100vh;
+  min-height: 60vh;
   height: auto;
   display: flex;
   justify-content: center;
@@ -396,7 +416,6 @@ header.scrolled {
   background: linear-gradient(180deg, #0A0A0A, rgba(30, 58, 138, 0.2));
   position: relative;
   overflow: hidden;
-  padding: 60px 0;
 }
 
 .carousel-container {
@@ -429,7 +448,7 @@ header.scrolled {
   justify-content: center;
   opacity: 0;
   transform: translateX(100%) scale(0.8);
-  transition: opacity 0.6s ease-in-out, transform 0.6s ease-in-out;
+  transition: opacity 0.8s ease-in-out, transform 0.8s ease-in-out; /* Tăng thời gian transition */
 }
 
 .carousel-item.active {
@@ -444,44 +463,17 @@ header.scrolled {
 }
 
 .carousel-image {
+  margin-bottom: 10px;
   max-width: 100%;
-  max-height: 800px;
+  max-height: 400px;
   object-fit: contain;
   border-radius: 16px;
   box-shadow: 0 0 30px rgba(59, 130, 246, 0.4);
-  transition: transform 0.3s ease;
+  transition: transform 0.5s ease; /* Tăng mượt mà */
 }
 
 .carousel-item.active .carousel-image {
   transform: scale(1.05);
-}
-
-.carousel-button {
-  height: 100px;
-  position: absolute;
-  top: 45%;
-  transform: translateY(-50%);
-  padding: 20px;
-  border: none;
-  border-radius: 10px;
-  background: none;
-  color: #E6E6E6;
-  cursor: pointer;
-  font-size: 30px;
-  transition: all 0.3s ease;
-  z-index: 20;
-}
-
-.carousel-button:hover {
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.7);
-}
-
-.carousel-button.prev {
-  left: calc(50% - 300px - 20px);
-}
-
-.carousel-button.next {
-  right: calc(50% - 300px - 20px);
 }
 
 /* Stats Section */
@@ -493,9 +485,9 @@ header.scrolled {
   padding: 40px;
   min-height: 500px;
   position: relative;
-  background: rgba(10, 10, 10, 0.7);
-  border-radius: 16px;
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+  /* background: rgba(10, 10, 10, 0.7); */
+  /* border-radius: 16px;
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.3); */
 }
 
 .stats img {
@@ -527,10 +519,10 @@ header.scrolled {
 
 .lines-canvas {
   position: absolute;
-  top: -80px;
+  top: 20;
   left: 0;
   width: 100%;
-  height: 100%;
+  height: 70%;
   z-index: -1;
   filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.3));
 }
@@ -728,8 +720,6 @@ header.scrolled {
   min-height: 600px;
   background: linear-gradient(135deg, rgba(10, 10, 10, 0.9), rgba(30, 58, 138, 0.2));
   backdrop-filter: blur(12px);
-  border-radius: 16px;
-  box-shadow: 0 0 30px rgba(59, 130, 246, 0.3);
 }
 
 .roadmap h2 {
@@ -824,7 +814,7 @@ header.scrolled {
 }
 
 .roadmap-list .time:hover {
-  box-shadow: 0 0 30px rgba(59, 130, 246, 0.7);
+
   transform: translateY(-3px);
 }
 
@@ -839,9 +829,6 @@ header.scrolled {
   transition: box-shadow 0.3s ease;
 }
 
-.roadmap-list .content:hover {
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
-}
 
 .roadmap-list .content p {
   margin: 10px 0;
@@ -906,12 +893,12 @@ footer {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 25px;
+  gap: 15px;
 }
 
 .social-icon {
-  width: 35px;
-  height: 35px;
+  width: 40px;
+  height: 40px;
   transition: transform 0.3s ease, filter 0.3s ease;
 }
 
@@ -977,7 +964,7 @@ footer {
 /* Responsive */
 @media (max-width: 768px) {
   header {
-    padding: 12px 20px;
+    padding: 5px 10px;
     flex-direction: column;
     align-items: flex-end;
   }
@@ -989,14 +976,14 @@ footer {
   }
 
   .logo img {
-    width: 100px;
+    width: 110px;
   }
 
   .menu {
     flex-direction: column;
     align-items: flex-end;
     font-size: 12px;
-    gap: 12px;
+    gap: 5px;
   }
 
   .hero {
@@ -1013,7 +1000,7 @@ footer {
   }
 
   .button, .button-container a {
-    width: 45%;
+    width: 150px;
     padding: 10px 20px;
     font-size: 14px;
     border-radius: 40px;
@@ -1113,6 +1100,15 @@ footer {
 
   .stats p {
     font-size: 14px;
+  }
+
+  .lines-canvas {
+    top: 50;
+    left: 0;
+    width: 100%;
+    height: 70%;
+    z-index: -1;
+    filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.3));
   }
 
   .text-list {
@@ -1239,7 +1235,7 @@ footer {
   }
 
   .social-icons {
-    margin: 30px 0;
+    margin: 10px 0;
   }
 
   .footer-links-container {

@@ -1561,7 +1561,7 @@ export default function Dashboard() {
         <div className="footer-links">
           <a href="https://x.com/sailabs_">Twitter</a>
           <a href="https://discord.com/channels/1365343044282486945/1365348227796172873" target='blank'>Discord</a>
-          <a href="index.html">Website</a>
+          <a href="https://sailabs.xyz/">Website</a>
         </div>
       </footer>
     </div>

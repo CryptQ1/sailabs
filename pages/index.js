@@ -12,7 +12,8 @@ export default function Home() {
   };
 
   const [currentIndex, setCurrentIndex] = useState(0);
-  const items = [0, 1, 2]; 
+  const items = [0, 1, 2];
+  const scrollTimeout = useRef(null);
 
   const handlePrevClick = () => {
     setCurrentIndex((prevIndex) => (prevIndex === 0 ? items.length - 1 : prevIndex - 1));
@@ -267,6 +268,205 @@ export default function Home() {
       window.addEventListener('resize', initLinesAndParticles);
     }
 
+    // Matrix Rain
+    function initMatrixAnimation() {
+      const canvas = document.getElementById('matrixCanvas');
+      if (!canvas) {
+        console.warn('No matrixCanvas found');
+        return;
+      }
+      const ctx = canvas.getContext('2d');
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    
+      // Kiểm tra thiết bị di động
+      const isMobile = window.innerWidth <= 768;
+      const fontSize = isMobile ? 10 : 14; // Giảm font trên di động
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()_+-=[]{}|;:,.<>?'; // Định nghĩa chars
+      const columns = Math.floor(canvas.width / fontSize);
+      const drops = Array(columns).fill(0);
+      const mouse = { x: null, y: null };
+      let lastUpdate = 0;
+      let animationFrameId;
+    
+      // Số liệu nhấp nháy
+      const stats = [
+        { value: 1000, current: 0, label: 'Nodes Active' },
+        { value: 500, current: 0, label: 'Data Points' },
+        { value: 200, current: 0, label: 'AI Models' },
+      ];
+      let isCounting = false;
+    
+      // Xử lý tương tác chuột hoặc chạm
+      const updateInteractionPosition = (x, y) => {
+        const rect = canvas.getBoundingClientRect();
+        mouse.x = x - rect.left;
+        mouse.y = y - rect.top;
+      };
+    
+      const handleMouseMove = (e) => {
+        updateInteractionPosition(e.clientX, e.clientY);
+      };
+    
+      const handleTouchMove = (e) => {
+        e.preventDefault(); // Ngăn cuộn mặc định khi chạm
+        const touch = e.touches[0];
+        updateInteractionPosition(touch.clientX, touch.clientY);
+      };
+    
+      canvas.addEventListener('mousemove', handleMouseMove);
+      canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    
+      function draw(timestamp) {
+        if (timestamp - lastUpdate < (isMobile ? 40 : 33)) { // 25 FPS trên di động, 30 FPS trên desktop
+          animationFrameId = requestAnimationFrame(draw);
+          return;
+        }
+        lastUpdate = timestamp;
+    
+        ctx.fillStyle = 'rgba(10, 10, 10, 0.05)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+        ctx.font = `${fontSize}px Roboto Mono`;
+        for (let i = 0; i < drops.length; i++) {
+          const text = chars.charAt(Math.floor(Math.random() * chars.length)); // Sử dụng chars
+          const x = i * fontSize;
+          const y = drops[i] * fontSize;
+    
+          let glow = false;
+          if (mouse.x !== null && mouse.y !== null) {
+            const distance = Math.sqrt((mouse.x - x) ** 2 + (mouse.y - y) ** 2);
+            if (distance < (isMobile ? 100 : 150)) {
+              glow = true;
+              ctx.fillStyle = '#3B82F6';
+              ctx.shadowColor = '#3B82F6';
+              ctx.shadowBlur = isMobile ? 5 : 10;
+            } else {
+              ctx.fillStyle = '#1E3A8A';
+              ctx.shadowBlur = 0;
+            }
+          } else {
+            ctx.fillStyle = '#1E3A8A';
+            ctx.shadowBlur = 0;
+          }
+    
+          ctx.fillText(text, x, y);
+    
+          if (y > canvas.height && Math.random() > 0.975) {
+            drops[i] = 0;
+          } else {
+            drops[i]++;
+          }
+        }
+    
+        // Vẽ số liệu nhấp nháy
+        if (isCounting) {
+          stats.forEach((stat, index) => {
+            if (stat.current < stat.value) {
+              stat.current += Math.ceil(stat.value / (50 + Math.random() * 50));
+              if (stat.current > stat.value) stat.current = stat.value;
+            }
+            ctx.font = isMobile ? '30px Roboto Mono' : '40px Roboto Mono';
+            ctx.fillStyle = isMobile ? 'rgba(230, 230, 230, 0.9)' : 'rgba(163, 163, 163, 0.8)';
+            // ctx.shadowColor = '#E6E6E6';
+            // ctx.shadowBlur = isMobile ? 3 : 5;
+            const yPosition = canvas.height * (0.15 + index * 0.25); // 15%, 50%, 85%
+            ctx.fillText(`${stat.current} ${stat.label}`, isMobile ? 50 : 100, yPosition);
+            ctx.shadowBlur = 0;
+          });
+        }
+    
+        animationFrameId = requestAnimationFrame(draw);
+      }
+    
+      const handleResize = () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        drops.length = Math.floor(canvas.width / fontSize);
+        for (let i = 0; i < drops.length; i++) {
+          drops[i] = Math.floor(Math.random() * canvas.height / fontSize);
+        }
+      };
+      window.addEventListener('resize', handleResize);
+    
+      const matrixSection = document.querySelector('.matrix-section');
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries[0].isIntersecting) {
+            if (!animationFrameId) draw(0);
+            isCounting = true;
+          } else {
+            if (animationFrameId) {
+              cancelAnimationFrame(animationFrameId);
+              animationFrameId = null;
+            }
+            isCounting = false;
+            stats.forEach((stat) => (stat.current = 0));
+          }
+        },
+        { threshold: 0.3 }
+      );
+      observer.observe(matrixSection);
+    
+      return () => {
+        canvas.removeEventListener('mousemove', handleMouseMove);
+        canvas.removeEventListener('touchmove', handleTouchMove);
+        window.removeEventListener('resize', handleResize);
+        observer.disconnect();
+        if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      };
+    }
+
+    // CarouselScroll
+
+    function initCarouselScroll() {
+      const carouselSection = document.querySelector('.carousel-section');
+      if (!carouselSection) {
+        console.warn('No carousel-section found');
+        return;
+      }
+
+      const handleWheel = (e) => {
+        e.preventDefault(); // Giảm tốc độ cuộn mặc định
+        if (scrollTimeout.current) return; // Ngăn chuyển đổi liên tục
+
+        const delta = e.deltaY;
+        if (delta > 0) {
+          // Cuộn xuống: Chuyển sang item tiếp theo
+          setCurrentIndex((prevIndex) => (prevIndex === items.length - 1 ? 0 : prevIndex + 1));
+        } else if (delta < 0) {
+          // Cuộn lên: Chuyển sang item trước
+          setCurrentIndex((prevIndex) => (prevIndex === 0 ? items.length - 1 : prevIndex - 1));
+        }
+
+        // Giới hạn tốc độ chuyển đổi
+        scrollTimeout.current = setTimeout(() => {
+          scrollTimeout.current = null;
+        }, 600); // Chuyển đổi mỗi 600ms
+      };
+
+      // Gắn sự kiện wheel
+      carouselSection.addEventListener('wheel', handleWheel, { passive: false });
+
+      // Giảm tốc độ cuộn toàn trang khi trong carousel-section
+      const handleSectionScroll = (e) => {
+        const rect = carouselSection.getBoundingClientRect();
+        if (rect.top <= 0 && rect.bottom >= 0) {
+          e.preventDefault();
+          window.scrollBy({
+            top: e.deltaY * 0.5, // Giảm tốc độ cuộn xuống 30%
+            behavior: 'smooth',
+          });
+        }
+      };
+      window.addEventListener('wheel', handleSectionScroll, { passive: false });
+
+      return () => {
+        carouselSection.removeEventListener('wheel', handleWheel);
+        window.removeEventListener('wheel', handleSectionScroll);
+      };
+    }
+
     function initTextAnimation() {
       const items = document.querySelectorAll('.text-list li');
       if (items.length === 0) {
@@ -483,7 +683,7 @@ export default function Home() {
     // Typewriter Effect
     const textElement = document.getElementById('typewriter-text');
     if (textElement) {
-      const text = 'Reshape the data economy through a decentralized network that leverages idle bandwidth, integrates Artificial Intelligence (AI), and employs ZK-Compression on the Solana blockchain...';
+      const text = 'Reshaping the data economy through a decentralized network that leverages idle bandwidth, integrates Artificial Intelligence (AI) and uses ZK-Compression .Build on Solana';
       let index = 0;
       function typeEffect() {
         if (index < text.length) {
@@ -574,11 +774,15 @@ export default function Home() {
     initRoadmapAnimation();
     initStepsAnimation();
     initDeviceAndStatsAnimation();
+    const cleanupMatrix = initMatrixAnimation();
+    const cleanupCarousel = initCarouselScroll(); // Thêm Matrix animation
 
     return () => {
       cleanupParticle();
+      cleanupMatrix();
+      cleanupCarousel(); // Dọn dẹp Matrix animation
     };
-  }, []);
+  }, [currentIndex]);
 
   return (
     <div>
@@ -588,28 +792,28 @@ export default function Home() {
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
-      
+
       <header>
-  <div className="logo">
-    <Image src="/logo.png" alt="S.AI Logo" width={100} height={50} loading="lazy" />
-  </div>
-  <div className="menu">
-    <div className="social-icons">
-      <a href="https://x.com/sailabs_" target="_blank" rel="noopener noreferrer">
-        <img src="/twitter.png" alt="Twitter" className="social-icon" loading="lazy" />
-      </a>
-      <a href="https://discord.com" target="_blank" rel="noopener noreferrer">
-        <img src="/discord.png" alt="Discord" className="social-icon" loading="lazy" />
-      </a>
-      <a href="https://telegram.org" target="_blank" rel="noopener noreferrer">
-        <img src="/telegram.png" alt="Telegram" className="social-icon" loading="lazy" />
-      </a>
-    </div>
-    <a href={process.env.NEXT_PUBLIC_DASHBOARD_URL} target="_blank" rel="noopener noreferrer">
-  Dashboard
-</a>
-  </div>
-</header>
+        <div className="logo">
+          <Image src="/logo.png" alt="S.AI Logo" width={100} height={50} loading="lazy" />
+        </div>
+        <div className="menu">
+          <div className="social-icons">
+            <a href="https://x.com/sailabs_" target="_blank" rel="noopener noreferrer">
+              <img src="/twitter.png" alt="Twitter" className="social-icon" loading="lazy" />
+            </a>
+            <a href="https://discord.com" target="_blank" rel="noopener noreferrer">
+              <img src="/discord.png" alt="Discord" className="social-icon" loading="lazy" />
+            </a>
+            <a href="https://telegram.org" target="_blank" rel="noopener noreferrer">
+              <img src="/telegram.png" alt="Telegram" className="social-icon" loading="lazy" />
+            </a>
+          </div>
+          <a href={process.env.NEXT_PUBLIC_DASHBOARD_URL} target="_blank" rel="noopener noreferrer">
+            Dashboard
+          </a>
+        </div>
+      </header>
       <div className="hero">
         <canvas id="particleCanvas" className="particle-canvas"></canvas>
         <h1>DECENTRALIZED DATA AND BLOCKCHAIN</h1>
@@ -640,7 +844,15 @@ export default function Home() {
         <img src="/logo5.png" alt="Logo 5" loading="lazy" />
         <img src="/logo6.png" alt="Logo 6" loading="lazy" />
         <img src="/logo7.png" alt="Logo 7" loading="lazy" />
+        <img src="/logo8.png" alt="Logo 8" loading="lazy" />
+        <img src="/logo9.png" alt="Logo 9" loading="lazy" />
       </div>
+
+      {/* Matrix */}
+      <section className="matrix-section">
+        <canvas id="matrixCanvas" className="matrix-canvas"></canvas>
+      </section>
+
       <div className="device-content">
         <p>
           In the digital era, data fuels innovation, yet centralized platforms dominate data
@@ -653,9 +865,6 @@ export default function Home() {
       </div>
       <section className="carousel-section">
         <div className="carousel-container">
-          <button className="carousel-button prev" onClick={handlePrevClick}>
-            &lt;
-          </button>
           <div className="carousel-items">
             {items.map((item, index) => (
               <div
@@ -673,9 +882,6 @@ export default function Home() {
               </div>
             ))}
           </div>
-          <button className="carousel-button next" onClick={handleNextClick}>
-            &gt;
-          </button>
         </div>
       </section>
       <div className="stats">
@@ -695,7 +901,7 @@ export default function Home() {
       <section className="zk-section">
         <h1>LEVERAGE ZK-COMPRESSION</h1>
         <div className="powered-by">
-          <span>Powered by</span>
+          <span>Build on</span>
           <div className="logo-container">
             <img src="/zk-logo.png" alt="ZK Logo" loading="lazy" />
           </div>
