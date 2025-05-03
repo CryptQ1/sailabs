@@ -1,3 +1,5 @@
+// dashboard.js
+
 import Head from 'next/head';
 import dynamic from 'next/dynamic';
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
@@ -5,9 +7,8 @@ import '../styles/dashboard.css';
 import { io } from 'socket.io-client';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import { signIn, signOut, useSession } from 'next-auth/react';
-import { getSession } from 'next-auth/react';
 import Image from 'next/image';
+import * as THREE from 'three';
 
 const Bar = dynamic(() => import('react-chartjs-2').then((mod) => mod.Bar), { ssr: false });
 import { Chart, LinearScale, CategoryScale, BarElement, Tooltip, Legend } from 'chart.js';
@@ -16,7 +17,6 @@ Chart.register(LinearScale, CategoryScale, BarElement, Tooltip, Legend);
 
 export default function Dashboard() {
   const { publicKey, signMessage, connect, disconnect, connected } = useWallet();
-  const { data: session, status } = useSession();
   const [isConnected, setIsConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState('');
   const [connectedWallet, setConnectedWallet] = useState(null);
@@ -44,16 +44,21 @@ export default function Dashboard() {
   const [showReferralInput, setShowReferralInput] = useState(true);
   const [referralError, setReferralError] = useState('');
   const [solanaConnected, setSolanaConnected] = useState(false);
-  const [discordConnected, setDiscordConnected] = useState(false);
-  const [discordUsername, setDiscordUsername] = useState('');
   const [error, setError] = useState('');
   const [isSigning, setIsSigning] = useState(false);
-  const [isUpdatingRoles, setIsUpdatingRoles] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const signedRef = useRef(false);
   const socketRef = useRef(null);
   const inputRefs = useRef([]);
+  const [discordId, setDiscordId] = useState('');
+  const [isDiscordLinked, setIsDiscordLinked] = useState(false);
+  const [isDiscordLoading, setIsDiscordLoading] = useState(false);
+  const [discordError, setDiscordError] = useState('');
+  const [discordAvatar, setDiscordAvatar] = useState('');
+  const [discordUsername, setDiscordUsername] = useState('');
+
+
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001/api';
   const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000';
@@ -108,7 +113,7 @@ export default function Dashboard() {
   const fetchWithAuth = useCallback(async (endpoint, method = 'GET', body = null, retries = 3) => {
     const token = getJwt();
     if (!token) {
-      console.error('No JWT token available for endpoint:', endpoint);
+      console.error('No JWT token for endpoint:', endpoint);
       setError('Please log in again');
       return null;
     }
@@ -132,10 +137,15 @@ export default function Dashboard() {
           setIsConnected(false);
           return null;
         }
+        if (response.status === 400) {
+          console.error('Invalid request for', endpoint);
+          const errorData = await response.json();
+          return errorData;
+        }
         if (response.status === 403) {
-          console.error('Forbidden error for', endpoint);
-          setError('No access. Please try again.');
-          return null; // Không reload trang
+          console.error('Access denied error for', endpoint);
+          setError('Access denied. Please try again.');
+          return null;
         }
         if (!response.ok) {
           console.error('HTTP error for', endpoint, ': Status', response.status);
@@ -143,7 +153,7 @@ export default function Dashboard() {
         }
         return await response.json();
       } catch (error) {
-        console.error('Fetch attempt', i + 1, 'failed for', endpoint, ':', error.message);
+        console.error('Attempt', i + 1, 'failed for', endpoint, ':', error.message);
         if (i === retries - 1) {
           setError('Server connection error. Please try again.');
           return null;
@@ -151,18 +161,7 @@ export default function Dashboard() {
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
-  }, [getJwt, checkStorageAccess , API_BASE_URL]);
-
-  // Cập nhật trạng thái Discord từ session
-  useEffect(() => {
-    if (status === 'authenticated' && session?.user?.discordId) {
-      setDiscordConnected(true);
-      setDiscordUsername(session.user.name || 'Discord User');
-    } else {
-      setDiscordConnected(false);
-      setDiscordUsername('');
-    }
-  }, [session, status]);
+  }, [getJwt, checkStorageAccess, API_BASE_URL]);
 
   const savePointsToDB = useCallback(async (wallet, date, points) => {
     try {
@@ -254,130 +253,6 @@ export default function Dashboard() {
     }
   }, [walletAddress, savePointsToDB, fetchWithAuth]);
 
-  const connectDiscord = useCallback(async () => {
-    if (!publicKey) {
-      setError('Please connect Solana wallet first.');
-      return;
-    }
-    setIsLoading(true);
-    setError('');
-  
-    try {
-      // Xóa phiên Discord cũ nếu có
-      const currentSession = await getSession();
-      if (currentSession?.user?.discordId) {
-        console.log('Existing Discord session found, signing out...');
-        await signOut({ redirect: false });
-      }
-  
-      // Gọi signIn
-      const result = await signIn('discord', { redirect: false });
-      if (result.error) {
-        console.warn('SignIn returned temporary error, continuing:', result.error);
-      }
-  
-      const checkSession = async (maxAttempts = 3, delay = 500) => {
-        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-          const currentSession = await getSession();
-          if (currentSession?.user?.discordId) {
-            console.log(`Session found on attempt ${attempt}:`, currentSession.user);
-            const response = await fetchWithAuth('/update-discord-id', 'POST', {
-              publicKey: publicKey.toString(),
-              discordId: currentSession.user.discordId,
-            });
-            if (!response?.success) {
-              console.error('Failed to link Discord:', response?.error);
-              setError(response?.error || 'Unable to link Discord account');
-              setDiscordConnected(false);
-              setDiscordUsername('');
-              await signOut({ redirect: false });
-            } else {
-              setDiscordConnected(true);
-              setDiscordUsername(currentSession.user.name || 'Discord User');
-              setError('');
-              const token = getJwt();
-              if (token && publicKey && connected && !isConnected) {
-                setIsConnected(true);
-                setWalletAddress(publicKey.toString());
-                setSolanaConnected(true);
-                setConnectedWallet({ publicKey });
-                signedRef.current = true;
-                if (socketRef.current) {
-                  socketRef.current.emit('join', publicKey.toString());
-                }
-              }
-            }
-            return true;
-          }
-          console.log(`Session not ready on attempt ${attempt}, waiting ${delay}ms...`);
-          await new Promise((resolve) => setTimeout(resolve, delay));
-        }
-        return false;
-      };
-  
-      const sessionFound = await checkSession();
-      if (!sessionFound) {
-        console.error('Session not found after retries');
-        setError('Unable to get Discord information. Please try again.');
-      }
-    } catch (error) {
-      console.error('Critical error connecting Discord:', error);
-      setError(error.message || 'Cannot connect to Discord');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [publicKey, fetchWithAuth, getJwt, connected, isConnected]);
-
-  const disconnectDiscord = useCallback(async () => {
-    if (!publicKey) {
-      setError('Please connect Solana wallet first');
-      return;
-    }
-    setIsLoading(true);
-    setError('');
-    try {
-      const response = await fetchWithAuth('/disconnect-discord', 'POST', {
-        publicKey: publicKey.toString(),
-      });
-      if (!response?.success) {
-        throw new Error(response?.error || 'Can not disconnect from Discord');
-      }
-      await signOut({ redirect: false });
-      setDiscordConnected(false);
-      setDiscordUsername('');
-      setError('');
-      console.log('Discord disconnected successfully');
-    } catch (error) {
-      console.error('Error disconnecting Discord:', error);
-      setError(error.message || 'Can not disconnect from Discord');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [publicKey, fetchWithAuth]);
-
-  const updateDiscordRoles = useCallback(async () => {
-    if (!discordConnected || !publicKey) {
-      setError('Please connect Solana wallet and Discord first');
-      return;
-    }
-    setIsUpdatingRoles(true);
-    try {
-      const response = await fetchWithAuth('/discord/update-roles', 'POST', {
-        publicKey: publicKey.toString(),
-      });
-      if (response.success) {
-        alert('Discord role update request successful!');
-      } else {
-        throw new Error(response.error || 'Unable to update role');
-      }
-    } catch (error) {
-      console.error('Error updating Discord roles:', error);
-      setError('Unable to update Discord role');
-    } finally {
-      setIsUpdatingRoles(false);
-    }
-  }, [discordConnected, publicKey, fetchWithAuth]);
-
   const canSignWallet = useCallback(() => {
     if (!lastSignedTime) return true;
     const now = Date.now();
@@ -411,10 +286,11 @@ export default function Dashboard() {
       return;
     }
     if (code.length !== 6) {
-      setReferralError('Invalid invitation code !');
+      setReferralError('Invalid referral code! Please enter a 6-character code.');
       return;
     }
 
+    setIsLoading(true);
     try {
       const response = await fetch(`${API_BASE_URL}/referrals/validate`, {
         method: 'POST',
@@ -423,22 +299,25 @@ export default function Dashboard() {
       });
 
       if (!response.ok) {
-        const text = await response.text();
-        console.error('Non-JSON response from /referrals/validate:', text);
-        setReferralError('Error checking invitation code. Please try again.');
+        const errorData = await response.json();
+        console.error('Referral code validation error:', errorData);
+        setReferralError(errorData.error || 'Error validating referral code. Please try again.');
         return;
       }
 
       const result = await response.json();
       if (result.success) {
+        console.log('Valid referral code:', code);
         setShowReferralInput(false);
         setReferralError('');
       } else {
-        setReferralError('The invitation code is invalid or has already been used.');
+        setReferralError('Invalid or already used referral code.');
       }
     } catch (error) {
-      console.error('Error validating referral code:', error);
-      setReferralError('Error checking invitation code. Please try again.');
+      console.error('Referral code validation error:', error);
+      setReferralError('Server connection error. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   }, [referralCodeInput]);
 
@@ -450,6 +329,7 @@ export default function Dashboard() {
 
   const connectAndSignWallet = useCallback(async () => {
     if (isConnected || isSigning || !canSignWallet() || signedRef.current) {
+      console.log('Cannot sign wallet: already connected or signing');
       return;
     }
 
@@ -458,51 +338,65 @@ export default function Dashboard() {
 
     try {
       if (!connected) {
+        console.log('Connecting wallet...');
         await connect();
       }
 
       if (!publicKey || !signMessage) {
-        throw new Error('Wallet not connected or signMessage not available');
+        throw new Error('Wallet not connected or does not support message signing');
       }
 
       const publicKeyStr = publicKey.toString();
-      const message = 'Sign this message to verify your wallet for NexusAI Nodes';
+      const message = 'Sign this message to verify your wallet';
       const encodedMessage = new TextEncoder().encode(message);
 
       let signed;
       try {
+        console.log('Requesting wallet signature...');
         signed = await signMessage(encodedMessage);
       } catch (error) {
         console.error('Error signing message:', error);
-        setError('You have unsigned your wallet. Please try again!');
+        console.log('User cancelled signing, disconnecting wallet...');
+        await disconnect().catch((err) => {
+          console.error('Error disconnecting wallet:', err);
+        });
+        setError('User cancelled wallet signing');
+        setIsConnected(false);
+        setWalletAddress('');
+        setConnectedWallet(null);
+        setSolanaConnected(false);
+        signedRef.current = false;
         setIsSigning(false);
+        setJwt(null);
+        if (checkStorageAccess()) {
+          localStorage.removeItem('jwt');
+        }
+        console.log('State after cancel:', {
+          isConnected: false,
+          walletAddress: '',
+          solanaConnected: false,
+          error: 'User cancelled wallet signing',
+        });
         return;
       }
 
       const signatureBase64 = btoa(String.fromCharCode(...signed));
 
-      let response;
-      try {
-        response = await fetch(`${API_BASE_URL}/auth/sign`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            publicKey: publicKeyStr,
-            signature: signatureBase64,
-            referralCode: referralCodeInput.join('') || undefined,
-          }),
-        });
-      } catch (error) {
-        console.error('Fetch error:', error);
-        setError('Unable to connect to server. Please check your network connection and try again.');
-        setIsSigning(false);
-        return;
-      }
+      console.log('Sending signature to server...');
+      const response = await fetch(`${API_BASE_URL}/auth/sign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          publicKey: publicKeyStr,
+          signature: signatureBase64,
+          referralCode: referralCodeInput.join('') || undefined,
+        }),
+      });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Server error:', response.status, errorText);
-        setError(`Lỗi server: ${errorText || 'Unable to verify wallet. Please try again.'}`);
+        const errorData = await response.json();
+        console.error('Server error:', errorData);
+        setError(errorData.error || 'Unable to verify wallet. Please try again.');
         setIsSigning(false);
         return;
       }
@@ -524,12 +418,31 @@ export default function Dashboard() {
         fetchReferralRanking();
         fetchLeaderboard();
         fetchUserStats();
+        console.log('Wallet signed successfully, connected:', publicKeyStr);
       } else {
         throw new Error(result.error || 'Authentication failed');
       }
     } catch (error) {
       console.error('Error connecting or signing wallet:', error);
       setError(error.message || 'Authentication failed. Please try again.');
+      await disconnect().catch((err) => {
+        console.error('Error disconnecting wallet:', err);
+      });
+      setIsConnected(false);
+      setWalletAddress('');
+      setConnectedWallet(null);
+      setSolanaConnected(false);
+      signedRef.current = false;
+      setJwt(null);
+      if (checkStorageAccess()) {
+        localStorage.removeItem('jwt');
+      }
+      console.log('State after error:', {
+        isConnected: false,
+        walletAddress: '',
+        solanaConnected: false,
+        error: error.message || 'Authentication failed. Please try again.',
+      });
     } finally {
       setIsSigning(false);
     }
@@ -540,6 +453,7 @@ export default function Dashboard() {
     canSignWallet,
     connected,
     connect,
+    disconnect,
     publicKey,
     signMessage,
     referralCodeInput,
@@ -548,6 +462,7 @@ export default function Dashboard() {
     fetchReferralRanking,
     fetchLeaderboard,
     fetchUserStats,
+    checkStorageAccess,
   ]);
 
   const disconnectSolana = useCallback(async () => {
@@ -564,49 +479,88 @@ export default function Dashboard() {
   }, [disconnect]);
 
   const logout = useCallback(() => {
-    if (connectedWallet) {
-      disconnectSolana();
-    }
-    signOut({ redirect: false }).catch((err) => {
-      console.error('Error signing out Discord:', err);
-    });
+    localStorage.removeItem('jwt');
+    setJwt(null);
     setIsConnected(false);
     setWalletAddress('');
     setConnectedWallet(null);
-    setLastSignedTime(null);
-    setReferralsCount(0);
-    setCurrentTier('None');
-    setIsNodeConnected(false);
-    setTotalPoints(0);
-    setTodayPoints(0);
-    setHoursToday(0);
-    setDaysSeason1(0);
-    setNetworkStrength(0);
-    setReferralCode('');
-    setReferralLink('');
-    setReferralRanking([]);
-    setLeaderboard([]);
-    setDailyPoints(Array(14).fill(0));
-    setReferralCodeInput(['', '', '', '', '', '']);
-    setShowReferralInput(true);
-    setReferralError('');
-    setSolanaConnected(false);
-    setDiscordConnected(false);
+    setIsDiscordLinked(false); // Reset Discord status
+    setError('');
+    if (disconnect) disconnect();
+  }, [disconnect]);
+
+  const linkDiscord = useCallback(async () => {
+    if (!isConnected) {
+      setDiscordError('Please connect a Solana wallet before linking Discord');
+      return;
+    }
+
+    setIsDiscordLoading(true);
+    setDiscordError('');
     setDiscordUsername('');
-    signedRef.current = false;
-    if (checkStorageAccess()) {
-      try {
-        localStorage.removeItem('jwt');
-      } catch (e) {
-        console.error('Failed to remove JWT from localStorage:', e);
+    setDiscordAvatar('');
+
+    try {
+      const response = await fetchWithAuth('/discord/login', 'GET');
+      if (response && response.oauthUrl) {
+        window.location.href = response.oauthUrl;
+      } else {
+        throw new Error('Unable to retrieve Discord OAuth URL');
       }
+    } catch (err) {
+      console.error('Error initiating Discord OAuth:', err);
+      setDiscordError('Error connecting to Discord. Please try again.');
+    } finally {
+      setIsDiscordLoading(false);
     }
-    setJwt(null);
-    if (socketRef.current) {
-      socketRef.current.emit('node-disconnect');
-      socketRef.current.disconnect();
+  }, [isConnected, fetchWithAuth]);
+
+  const disconnectDiscord = useCallback(async () => {
+    setIsDiscordLoading(true);
+    setError('');
+    setDiscordError('');
+    setDiscordUsername('');
+    setDiscordAvatar('');
+
+    try {
+      const response = await fetchWithAuth('/discord/disconnect', 'POST');
+      if (response && response.success) {
+        setIsDiscordLinked(false);
+        setDiscordError('');
+        setDiscordUsername('');
+        setDiscordAvatar('');
+        alert('Discord account disconnected successfully!');
+      } else {
+        throw new Error('Unable to disconnect Discord');
+      }
+    } catch (err) {
+      console.error('Error disconnecting Discord:', err);
+      setDiscordError('Error disconnecting Discord. Please try again.');
+    } finally {
+      setIsDiscordLoading(false);
     }
-  }, [checkStorageAccess, connectedWallet, disconnectSolana]);
+  }, [fetchWithAuth]);
+
+  // Thêm hàm reloadRole
+  const reloadRole = useCallback(async () => {
+    setIsDiscordLoading(true);
+    setError('');
+
+    try {
+      const response = await fetchWithAuth('/discord/reload-role', 'POST');
+      if (response && response.success) {
+        setError('');
+        alert('Discord role synchronized successfully!');
+      } else {
+        throw new Error('Unable to synchronize Discord role');
+      }
+    } catch (err) {
+      console.error('Error reloading Discord role:', err);
+      setError('Error synchronizing Discord role. Please try again.');
+    } finally {
+      setIsDiscordLoading(false);
+    }
+  }, [fetchWithAuth]);
 
   const toggleNodeConnection = useCallback(async () => {
     if (!connectedWallet || !publicKey) {
@@ -651,7 +605,7 @@ export default function Dashboard() {
         socketRef.current.emit('node-disconnect');
       }
     }
-  }, [connectedWallet, publicKey, signMessage, isNodeConnected, setJwtToken , API_BASE_URL]);
+  }, [connectedWallet, publicKey, signMessage, isNodeConnected, setJwtToken, API_BASE_URL]);
 
   const copyText = useCallback((text) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -664,7 +618,7 @@ export default function Dashboard() {
       try {
         await navigator.share({
           title: 'Join S.AI',
-          text: 'Join NexusAI using my referral link!',
+          text: 'Join S.AI using my referral link!',
           url: referralLink,
         });
       } catch (err) {
@@ -746,14 +700,13 @@ export default function Dashboard() {
     );
   }, [activeTab]);
 
-
   const renderContent = useCallback(() => {
     switch (activeTab) {
       case 'profile':
         return (
           <div className="tab-content active">
             <h2>Profile</h2>
-            {error && !isLoading && <div className="error-message">{error}</div>} 
+            {error && !isLoading && <div className="error-message">{error}</div>}
             <div className="profile-cards">
               <div className="profile-card">
                 <h3>Current Tier</h3>
@@ -774,7 +727,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="profile-card">
-                <h3>{`Today's Points`}</h3>
+                <h3>Today's Points</h3>
                 <div className="card-content">
                   <span className="card-value">{todayPoints}</span>
                 </div>
@@ -795,30 +748,63 @@ export default function Dashboard() {
                 )}
               </div>
               <div className="social-table discord">
-                <h3>Discord</h3>
-                {isLoading ? (
-                  <div className="loading-message">loading...</div>
-                ) : discordConnected ? (
+                <h3>Discord Account</h3>
+                {isDiscordLinked ? (
                   <div className="social-content">
-                    <span className="social-status">Connected</span>
-                    <span className="social-handle">Username: {discordUsername}</span>
-                    <div className="button-group">
-                      <button className="disconnect-button" onClick={disconnectDiscord}>
-                        Disconnect
+                    <span className="social-status">Linked</span>
+                    <div className="social-handle">
+                      {discordUsername ? (
+                        <div className="discord-user">
+                          {discordAvatar && (
+                            <img src={discordAvatar} alt="Discord avatar" className="discord-avatar" />
+                          )}
+                          Connected as {discordUsername}
+                        </div>
+                      ) : (
+                        'Connected to Discord'
+                      )}
+                    </div>
+                    <div className="discord-actions">
+                      <button
+                        onClick={disconnectDiscord}
+                        className="disconnect-discord-button"
+                        disabled={isDiscordLoading}
+                      >
+                        {isDiscordLoading ? 'Disconnecting...' : 'Disconnect'}
                       </button>
                       <button
-                        className="update-roles-button"
-                        onClick={updateDiscordRoles}
-                        disabled={isUpdatingRoles}
+                        onClick={reloadRole}
+                        className="reload-role-button"
+                        disabled={isDiscordLoading}
                       >
-                        {isUpdatingRoles ? 'Updating...' : 'Reload role'}
+                        {isDiscordLoading ? 'Reloading...' : 'Reload Role'}
                       </button>
                     </div>
+                    {discordError && (
+                      <div className="error-message">{discordError}</div>
+                    )}
                   </div>
                 ) : (
-                  <button className="connect-button" onClick={connectDiscord}>
-                    Connect Discord
-                  </button>
+                  <div className="social-content">
+                    <a
+                      href="https://discord.com/channels/1365343044282486945/1365348227796172873" // Thay bằng URL Discord thật
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="discord-join-link"
+                    >
+                      Join <img src="/discord.png" alt="Discord logo" className="discord-logo" /> S.AI official Discord
+                    </a>
+                    <button
+                      onClick={linkDiscord}
+                      className="link-discord-button"
+                      disabled={isDiscordLoading || !isConnected}
+                    >
+                      {isDiscordLoading ? 'Connecting...' : 'Connect to get roles'}
+                    </button>
+                    {discordError && (
+                      <div className="error-message">{discordError}</div>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -862,8 +848,10 @@ export default function Dashboard() {
                   <div className="network-text">
                     Network Status: {networkStrength > 0 ? `Connected (${networkStrength}/4)` : 'Disconnected'}
                   </div>
-                  <button className={`connect-button ${isNodeConnected ? 'disconnect' : 'connect'}`}
-                    onClick={toggleNodeConnection}>
+                  <button
+                    className={`connect-button ${isNodeConnected ? 'disconnect' : 'connect'}`}
+                    onClick={toggleNodeConnection}
+                  >
                     {isNodeConnected ? 'Disconnect' : 'Connect'}
                   </button>
                 </div>
@@ -984,17 +972,17 @@ export default function Dashboard() {
               <h3>Tier Info</h3>
               <div className="tier-list">
                 {[
-                  { tier: 'Tier 1', points: 100, logo: '/tier1.png' },
-                  { tier: 'Tier 2', points: 500, logo: '/tier2.png' },
-                  { tier: 'Tier 3', points: 1000, logo: '/tier3.png' },
-                  { tier: 'Tier 4', points: 5000, logo: '/tier4.png' },
+                  { tier: 'Tier 1', points: 200, logo: '/tier1.png' },
+                  { tier: 'Tier 2', points: 1000, logo: '/tier2.png' },
+                  { tier: 'Tier 3', points: 3000, logo: '/tier3.png' },
+                  { tier: 'Tier 4', points: 6000, logo: '/tier4.png' },
                   { tier: 'Tier 5', points: 10000, logo: '/tier5.png' },
                 ].map((tier) => (
                   <div key={tier.tier} className="tier-item">
                     <div className="tier-image">
                       <img src={tier.logo} alt={`${tier.tier} logo`} />
                     </div>
-                    <div className="tier-details">                     
+                    <div className="tier-details">
                       <span className="tier-points">{tier.points} Points</span>
                     </div>
                   </div>
@@ -1124,145 +1112,246 @@ export default function Dashboard() {
     copyText,
     shareReferral,
     solanaConnected,
-    discordConnected,
-    discordUsername,
     publicKey,
     error,
     connectAndSignWallet,
     disconnectSolana,
-    connectDiscord,
-    disconnectDiscord,
-    updateDiscordRoles,
-    isUpdatingRoles,
   ]);
 
   useEffect(() => {
-    const initParticleAnimation = () => {
-      const canvas = document.getElementById('particleCanvas');
-      if (!canvas || !window.THREE) {
-        console.warn('No particleCanvas or Three.js not loaded');
-        return () => {}; 
-      }
-    
-      const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-      const renderer = new THREE.WebGLRenderer({ canvas, alpha: true });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.setPixelRatio(window.devicePixelRatio);
-    
-      const sphereGeometry = new THREE.SphereGeometry(5, 32, 32);
-      const wireframeMaterial = new THREE.MeshBasicMaterial({
-        color: 0xe0e0e0,
-        wireframe: true,
-        transparent: true,
-        opacity: 0.3,
-      });
-      const sphere = new THREE.Mesh(sphereGeometry, wireframeMaterial);
-      scene.add(sphere);
-    
-      const particleCount = 100;
-      const particlesGeometry = new THREE.BufferGeometry();
-      const positions = new Float32Array(particleCount * 3);
-      const colors = new Float32Array(particleCount * 3);
-    
-      for (let i = 0; i < particleCount; i++) {
-        const theta = Math.random() * Math.PI * 2;
-        const phi = Math.acos(2 * Math.random() - 1);
-        const r = 5 + (Math.random() - 0.5) * 0.2;
-        positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-        positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-        positions[i * 3 + 2] = r * Math.cos(phi);
-        colors[i * 3] = 0.9 + Math.random() * 0.1;
-        colors[i * 3 + 1] = 0.9 + Math.random() * 0.1;
-        colors[i * 3 + 2] = 0.9 + Math.random() * 0.1;
-      }
-    
-      particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      particlesGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    
-      const particleMaterial = new THREE.PointsMaterial({
-        size: 0.1,
-        vertexColors: true,
-        transparent: true,
-        opacity: 0.8,
-        blending: THREE.AdditiveBlending,
-      });
-    
-      const particles = new THREE.Points(particlesGeometry, particleMaterial);
-      scene.add(particles);
-    
-      camera.position.z = 10;
-    
-      const animate = () => {
-        requestAnimationFrame(animate);
-        sphere.rotation.y += 0.002;
-        particles.rotation.y += 0.002;
-        for (let i = 0; i < particleCount; i++) {
-          const i3 = i * 3;
-          const x = particlesGeometry.attributes.position.array[i3];
-          const y = particlesGeometry.attributes.position.array[i3 + 1];
-          const z = particlesGeometry.attributes.position.array[i3 + 2];
-          const r = Math.sqrt(x * x + y * y + z * z);
-          particlesGeometry.attributes.position.array[i3 + 1] += Math.sin(Date.now() * 0.001 + i) * 0.01;
-          particlesGeometry.attributes.position.array[i3] = r * Math.sin(Math.acos(z / r));
-        }
-        particlesGeometry.attributes.position.needsUpdate = true;
-        renderer.render(scene, camera);
-      };
-      animate();
-    
-      const resizeCanvas = () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-      };
-      window.addEventListener('resize', resizeCanvas);
-    
-      const loginContainer = document.getElementById('loginContainer');
-      let observer = null; 
-    
-      if (loginContainer) {
-        observer = new MutationObserver(() => {
-          if (loginContainer.style.display === 'none') {
-            renderer.setAnimationLoop(null);
+    const checkDiscordStatus = async () => {
+      if (isConnected && walletAddress) {
+        try {
+          const response = await fetchWithAuth('/discord/status', 'GET');
+          if (response && response.isLinked) {
+            setIsDiscordLinked(true);
+            setDiscordUsername(response.username || '');
+            setDiscordAvatar(response.avatar || '');
           } else {
-            renderer.setAnimationLoop(animate);
+            setIsDiscordLinked(false);
+            setDiscordUsername('');
+            setDiscordAvatar('');
           }
-        });
-        observer.observe(loginContainer, { attributes: true, attributeFilter: ['style'] });
-      }
-    
-      return () => {
-        window.removeEventListener('resize', resizeCanvas);
-        renderer.setAnimationLoop(null);
-        renderer.dispose();
-        if (observer) { 
-          observer.disconnect();
+        } catch (err) {
+          console.error('Error checking Discord status:', err);
+          setIsDiscordLinked(false);
+          setDiscordUsername('');
+          setDiscordAvatar('');
         }
-      };
+      }
     };
 
-    const cleanupParticle = initParticleAnimation() || (() => { });
+    checkDiscordStatus();
+  }, [isConnected, walletAddress, fetchWithAuth]);
 
+  useEffect(() => {
+    if (!connected && isConnected) {
+      console.log('Wallet disconnected, resetting state...');
+      setIsConnected(false);
+      setWalletAddress('');
+      setConnectedWallet(null);
+      setSolanaConnected(false);
+      signedRef.current = false;
+      setJwt(null);
+      if (checkStorageAccess()) {
+        localStorage.removeItem('jwt');
+      }
+      setError('Wallet disconnected. Please try again.');
+    }
+  }, [connected, isConnected, checkStorageAccess]);
+
+  // Tách useEffect cho particle
+  useEffect(() => {
+    if (isConnected) {
+      console.log('Skipping particle effect: user is connected');
+      return;
+    }
+
+    console.log('Setting up particle effect...');
+    let rafId = null;
+
+    const initParticleAnimation = () => {
+      console.log('Initializing particle effect...');
+      const canvas = document.getElementById('particleCanvas');
+      if (!canvas) {
+        console.error('Particle canvas not found');
+        return () => { };
+      }
+
+      try {
+        console.log('Canvas found, initializing WebGL...');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+
+        console.log('WebGL renderer initialized');
+
+        const sphereGeometry = new THREE.SphereGeometry(5, 32, 32);
+        const wireframeMaterial = new THREE.MeshBasicMaterial({
+          color: 0xe0e0e0,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.3,
+        });
+        const sphere = new THREE.Mesh(sphereGeometry, wireframeMaterial);
+        scene.add(sphere);
+
+        const particleCount = 100;
+        const particlesGeometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(particleCount * 3);
+        const colors = new Float32Array(particleCount * 3);
+
+        for (let i = 0; i < particleCount; i++) {
+          const theta = Math.random() * Math.PI * 2;
+          const phi = Math.acos(2 * Math.random() - 1);
+          const r = 5 + (Math.random() - 0.5) * 0.2;
+          positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+          positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+          positions[i * 3 + 2] = r * Math.cos(phi);
+          colors[i * 3] = 0.9 + Math.random() * 0.1;
+          colors[i * 3 + 1] = 0.9 + Math.random() * 0.1;
+          colors[i * 3 + 2] = 0.9 + Math.random() * 0.1;
+        }
+
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        particlesGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        const particleMaterial = new THREE.PointsMaterial({
+          size: 0.1,
+          vertexColors: true,
+          transparent: true,
+          opacity: 0.8,
+          blending: THREE.AdditiveBlending,
+        });
+
+        const particles = new THREE.Points(particlesGeometry, particleMaterial);
+        scene.add(particles);
+
+        console.log('Particle system added to scene');
+
+        camera.position.z = 10;
+
+        const animate = () => {
+          requestAnimationFrame(animate);
+          sphere.rotation.y += 0.002;
+          particles.rotation.y += 0.002;
+          for (let i = 0; i < particleCount; i++) {
+            const i3 = i * 3;
+            const x = particlesGeometry.attributes.position.array[i3];
+            const y = particlesGeometry.attributes.position.array[i3 + 1];
+            const z = particlesGeometry.attributes.position.array[i3 + 2];
+            const r = Math.sqrt(x * x + y * y + z * z);
+            particlesGeometry.attributes.position.array[i3 + 1] += Math.sin(Date.now() * 0.001 + i) * 0.01;
+            particlesGeometry.attributes.position.array[i3] = r * Math.sin(Math.acos(z / r));
+          }
+          particlesGeometry.attributes.position.needsUpdate = true;
+          renderer.render(scene, camera);
+        };
+        animate();
+
+        const resizeCanvas = () => {
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+          renderer.setSize(window.innerWidth, window.innerHeight);
+        };
+        window.addEventListener('resize', resizeCanvas);
+
+        const loginContainer = document.getElementById('loginContainer');
+        let observer = null;
+
+        if (loginContainer) {
+          observer = new MutationObserver(() => {
+            if (loginContainer.style.display === 'none') {
+              console.log('Login container hidden, stopping animation');
+              renderer.setAnimationLoop(null);
+            } else {
+              console.log('Login container visible, resuming animation');
+              renderer.setAnimationLoop(animate);
+            }
+          });
+          observer.observe(loginContainer, { attributes: true, attributeFilter: ['style'] });
+        } else {
+          console.warn('Login container not found for observer');
+        }
+
+        return () => {
+          console.log('Cleaning up particle effect');
+          window.removeEventListener('resize', resizeCanvas);
+          renderer.setAnimationLoop(null);
+          renderer.dispose();
+          if (observer) {
+            observer.disconnect();
+          }
+        };
+      } catch (error) {
+        console.error('Error initializing particle effect:', error);
+        return () => { };
+      }
+    };
+
+    // Chờ DOM render
+    rafId = requestAnimationFrame(() => {
+      const canvas = document.getElementById('particleCanvas');
+      if (canvas) {
+        console.log('Canvas available, starting animation');
+        initParticleAnimation();
+      } else {
+        console.log('Canvas not yet available, retrying...');
+        rafId = requestAnimationFrame(() => initParticleAnimation());
+      }
+    });
+
+    return () => {
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+      }
+      const cleanup = initParticleAnimation();
+      if (typeof cleanup === 'function') {
+        cleanup();
+      }
+    };
+  }, [isConnected]);
+
+  // Tách useEffect cho WebSocket
+  useEffect(() => {
     if (!socketRef.current) {
       socketRef.current = io(SOCKET_URL, {
-        reconnectionAttempts: 5,
+        reconnection: true,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1000,
         transports: ['websocket', 'polling'],
         withCredentials: true,
       });
 
       socketRef.current.on('connect', () => {
+        console.log('WebSocket connection successful:', socketRef.current.id);
         if (isConnected && walletAddress) {
           socketRef.current.emit('join', walletAddress);
         }
       });
 
       socketRef.current.on('connect_error', (error) => {
-        console.error('Socket connection error:', error);
-        setError('Failed to connect to server. Please try again later.');
+        console.error('WebSocket connection error:', error);
+        setError('Unable to connect to server. Retrying...');
+      });
+
+      socketRef.current.on('reconnect', (attempt) => {
+        console.log('WebSocket reconnected after', attempt, 'attempts');
+        setError('');
+        if (isConnected && walletAddress) {
+          socketRef.current.emit('join', walletAddress);
+        }
+      });
+
+      socketRef.current.on('reconnect_failed', () => {
+        console.error('Failed to reconnect WebSocket');
+        setError('Unable to connect to server. Please refresh the page.');
       });
 
       socketRef.current.on('points-update', (data) => {
+        console.log('Received points-update event:', data);
         setTotalPoints(data.totalPoints || 0);
         setTodayPoints(data.todayPoints || 0);
         setHoursToday(data.hoursToday || 0);
@@ -1275,6 +1364,7 @@ export default function Dashboard() {
       });
 
       socketRef.current.on('leaderboard-update', () => {
+        console.log('Received leaderboard-update event');
         fetchLeaderboard();
       });
     }
@@ -1284,28 +1374,29 @@ export default function Dashboard() {
         socketRef.current.disconnect();
         socketRef.current = null;
       }
-      if (typeof cleanupParticle === 'function') {
-        cleanupParticle(); 
-      }
     };
-  }, [isConnected, walletAddress, fetchLeaderboard]);
+  }, [isConnected, walletAddress, fetchLeaderboard, SOCKET_URL]);
 
   useEffect(() => {
     const initialize = async () => {
       const token = getJwt();
       if (token && publicKey && connected && !isConnected && !signedRef.current) {
-        setIsConnected(true);
-        setWalletAddress(publicKey.toString());
-        setSolanaConnected(true);
-        setConnectedWallet({ publicKey });
-        fetchReferralInfo(publicKey.toString());
-        fetchReferralRanking();
-        fetchLeaderboard();
-        fetchUserStats();
-        signedRef.current = true;
-        if (socketRef.current) {
-          socketRef.current.emit('join', publicKey.toString());
-        }
+        // Trì hoãn setIsConnected để chờ canvas render
+        setTimeout(() => {
+          console.log('Auto-connecting with existing JWT...');
+          setIsConnected(true);
+          setWalletAddress(publicKey.toString());
+          setSolanaConnected(true);
+          setConnectedWallet({ publicKey });
+          fetchReferralInfo(publicKey.toString());
+          fetchReferralRanking();
+          fetchLeaderboard();
+          fetchUserStats();
+          signedRef.current = true;
+          if (socketRef.current) {
+            socketRef.current.emit('join', publicKey.toString());
+          }
+        }, 100); // Trì hoãn 100ms
       }
 
       if (
@@ -1317,6 +1408,7 @@ export default function Dashboard() {
         !showReferralInput &&
         !signedRef.current
       ) {
+        console.log('Triggering auto-sign...');
         await connectAndSignWallet();
       }
 
@@ -1339,6 +1431,48 @@ export default function Dashboard() {
     canSignWallet,
   ]);
 
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('discord_linked') === 'true') {
+      setIsDiscordLinked(true);
+      setError('');
+      setDiscordError('');
+      // Lấy username và avatar từ API
+      const fetchDiscordInfo = async () => {
+        try {
+          const response = await fetchWithAuth('/discord/status', 'GET');
+          if (response && response.isLinked) {
+            setDiscordUsername(response.username || '');
+            setDiscordAvatar(response.avatar || '');
+          }
+        } catch (err) {
+          console.error('Error fetching Discord info:', err);
+        }
+      };
+      fetchDiscordInfo();
+      alert('Discord linked successfully!');
+      if (urlParams.get('tab') === 'profile') {
+        setActiveTab('profile');
+      }
+    } else if (urlParams.get('discord_error')) {
+      setActiveTab('profile');
+      const errorType = urlParams.get('discord_error');
+      let errorMessage = 'Error authenticating Discord. Please try again.';
+      if (errorType === 'cancelled') {
+        errorMessage = 'User cancelled Discord authentication';
+      } else if (errorType === 'missing_params') {
+        errorMessage = 'Missing Discord authentication information';
+      } else if (errorType === 'database') {
+        errorMessage = 'Database error linking Discord';
+      } else if (errorType === 'oauth') {
+        errorMessage = 'Discord OAuth error. Please try again.';
+      }
+      setDiscordError(errorMessage);
+    }
+    window.history.replaceState({}, document.title, '/dashboard');
+  }, [fetchWithAuth]);
+
+
   return (
     <div className="dashboard-wrapper">
       <Head>
@@ -1350,7 +1484,7 @@ export default function Dashboard() {
       </Head>
       <header>
         <div className="logo">
-          <Image src="/logo.png" alt="Logo" width={100} height={50} loading="lazy"/>
+          <Image src="/logo.png" alt="Logo" width={100} height={50} loading="lazy" />
         </div>
         {isConnected && (
           <div className="user-info">
@@ -1368,11 +1502,7 @@ export default function Dashboard() {
           <div className="loading-message">loading...</div>
         </div>
       ) : !isConnected ? (
-        <div
-          id="loginContainer"
-          className="login-container"
-          style={{ display: 'flex' }}
-        >
+        <div id="loginContainer" className="login-container" style={{ display: 'flex' }}>
           <canvas id="particleCanvas" className="particle-canvas"></canvas>
           <div className="login-box">
             <h2>Sign In</h2>
@@ -1407,9 +1537,16 @@ export default function Dashboard() {
                 {isSigning ? (
                   <div className="loading-message">Signing wallet, please wait...</div>
                 ) : (
-                  <WalletMultiButton />
+                  <>
+                    <WalletMultiButton />
+                    {error && (
+                      <div className="error-message">
+                        {console.log('Rendering error:', error)} {/* Log để debug */}
+                        {error}
+                      </div>
+                    )}
+                  </>
                 )}
-                {error && !isLoading && <div className="error-message">{error}</div>}
               </div>
             )}
           </div>
@@ -1423,7 +1560,7 @@ export default function Dashboard() {
       <footer>
         <div className="footer-links">
           <a href="https://x.com/sailabs_">Twitter</a>
-          <a href="#discord">Discord</a>
+          <a href="https://discord.com/channels/1365343044282486945/1365348227796172873" target='blank'>Discord</a>
           <a href="index.html">Website</a>
         </div>
       </footer>

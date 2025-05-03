@@ -82,7 +82,6 @@ header.scrolled {
   font-size: 14px;
   color: #A3A3A3;
   position: relative;
-  padding-bottom: 5px;
   transition: color 0.3s ease;
 }
 
@@ -107,8 +106,8 @@ header.scrolled {
 
 .logout-button {
   padding: 8px 16px;
-  background: linear-gradient(45deg, #EF4444, #F87171);
-  border: none;
+  background: none;
+  border: 2px solid #F87171;
   border-radius: 8px;
   color: #E6E6E6;
   cursor: pointer;
@@ -159,6 +158,12 @@ header.scrolled {
   text-align: center;
   border: 1px solid rgba(59, 130, 246, 0.3);
   animation: fadeIn 1s ease-out;
+  display: flex; /* Thêm flex */
+  flex-direction: column; /* Xếp dọc */
+  align-items: center; /* Căn giữa ngang */
+  justify-content: center; /* Căn giữa dọc */
+  min-width: 300px; /* Đảm bảo chiều rộng tối thiểu */
+  max-width: 400px; /* Giới hạn chiều rộng tối đa */
 }
 
 .login-box h2 {
@@ -175,6 +180,38 @@ header.scrolled {
   flex-direction: column;
   gap: 12px;
   animation: fadeInUp 1s ease-out 0.3s forwards;
+  width: 100%; /* Đảm bảo chiếm toàn bộ chiều rộng */
+  align-items: center; /* Căn giữa các phần tử con */
+}
+
+/* Style cho WalletMultiButton */
+.wallet-multi-button {
+  width: 100%; /* Giới hạn chiều rộng */
+  max-width: 200px; /* Đảm bảo nút không quá rộng */
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: linear-gradient(45deg, #16A34A, #22C55E);
+  border: 1px solid #16A34A;
+  color: #E6E6E6;
+  text-align: center;
+}
+
+.wallet-multi-button:hover {
+  background: linear-gradient(45deg, #22C55E, #16A34A);
+  transform: scale(1.05);
+}
+
+.error-message {
+  color: #EF4444;
+  font-size: 14px;
+  text-align: center;
+  margin-top: 12px;
+  animation: fadeInUp 1s ease-out;
+  width: 100%; /* Đảm bảo căn giữa */
 }
 
 @keyframes fadeIn {
@@ -549,11 +586,11 @@ header.scrolled {
 }
 
 .social-table.solana .social-content::before {
-  background-image: url('/solana-icon.png'); /* Đảm bảo có icon này */
+  background-image: url('/solana-icon.png'); 
 }
 
 .social-table.discord .social-content::before {
-  background-image: url('/discord-icon.png'); /* Đảm bảo có icon này */
+  background-image: url('/discord-icon.png'); 
 }
 
 .social-status {
@@ -631,6 +668,167 @@ header.scrolled {
 
 .stat-box:hover {
   transform: scale(1.05);
+}
+
+/* Social Tables (Solana Wallet & Discord) */
+.social-table.discord {
+}
+
+.social-table.discord .social-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.social-table.discord .social-status {
+  font-size: 14px;
+  font-weight: 700;
+  color: #22C55E;
+}
+
+.social-table.discord .social-handle {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 16px;
+  color: #E6E6E6;
+  word-break: break-word;
+  max-width: 100%;
+  text-align: center;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.social-table.discord .discord-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.social-table.discord .discord-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid #5865F2;
+  object-fit: cover;
+}
+
+.social-table.discord .error-message {
+  color: #EF4444;
+  font-size: 14px;
+  text-align: center;
+  margin-top: 12px;
+  width: 100%;
+}
+
+.social-table.discord .link-discord-button {
+  padding: 8px 16px;
+  background: none;
+  color: white;
+  border: 2px solid rgba(59, 130, 246, 0.3);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s, transform 0.3s;
+}
+
+.social-table.discord .link-discord-button:hover {
+  background-color: #4752C4;
+  transform: scale(1.05);
+}
+
+.social-table.discord .discord-join-link {
+  display: flex;
+  align-items: center;
+  gap: 6px; /* Khoảng cách giữa chữ và logo */
+  font-size: 14px;
+  color: #E6E6E6; /* Màu Discord */
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: color 0.3s, background-color 0.3s, transform 0.3s;
+}
+
+.social-table.discord .discord-join-link:hover {
+  color: #E6E6E6;
+  background-color: rgba(88, 101, 242, 0.1); /* Nền nhẹ khi hover */
+  transform: scale(1.05);
+}
+
+.social-table.discord .discord-logo {
+  width: 20px;
+  height: 20px;
+  object-fit: contain; /* Đảm bảo logo không bị méo */
+}
+
+.discord-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
+
+
+/* dashboard.css */
+
+.discord-action-button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.disconnect-discord-button {
+  background: none;
+  color: white;
+  border: 2px solid rgba(59, 130, 246, 0.3);
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 10px;
+  margin-right: 10px;
+  transition: background-color 0.3s;
+}
+
+.disconnect-discord-button:hover {
+  background-color: #c82333;
+}
+
+.disconnect-discord-button:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
+}
+
+.reload-role-button {
+  background: none;
+  color: white;
+  border: 2px solid rgba(59, 130, 246, 0.3);
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 10px;
+  transition: background-color 0.3s;
+}
+
+.reload-role-button:hover {
+  background-color: #0056b3;
+}
+
+.reload-role-button:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
+}
+
+/* error */
+
+.error-message {
+  color: #dc3545;
+  font-size: 14px;
+  margin-top: 10px;
+  text-align: center;
 }
 
 /* Nodes Container */
@@ -914,7 +1112,7 @@ footer {
 }
 
 .footer-links a {
-  margin: 0 15px;
+  margin: 0 13px;
   color: #A3A3A3;
   font-size: 14px;
   position: relative;
@@ -1023,6 +1221,30 @@ footer {
     height: 72px;
   }
 
+  .social-table.discord .social-content {
+    gap: 8px;
+  }
+
+  .social-table.discord .social-handle {
+    font-size: 14px;
+    padding: 3px 6px;
+  }
+
+  .social-table.discord .discord-avatar {
+    width: 20px;
+    height: 20px;
+  }
+
+  .social-table.discord .error-message {
+    font-size: 13px;
+    margin-top: 8px;
+  }
+
+  .discord-actions {
+    flex-direction: column;
+    align-items: center;
+  }
+
   .tier-info .tier-image {
     width: 48px;
     height: 48px;
@@ -1038,6 +1260,8 @@ footer {
 
   .login-box {
     padding: 20px;
+    min-width: 250px;
+    max-width: 90%;
   }
 
   .login-box h2 {
@@ -1046,6 +1270,12 @@ footer {
 
   .login-buttons {
     gap: 8px;
+  }
+
+  .wallet-multi-button {
+    max-width: 180px;
+    font-size: 13px;
+    padding: 6px 12px;
   }
 
   .login-button,
@@ -1068,7 +1298,7 @@ footer {
   }
 
   .footer-links a {
-    margin: 0 10px;
+    margin: 0 15px;
     font-size: 12px;
   }
 }
