@@ -1187,7 +1187,7 @@ app.get('/api/discord/callback', async (req, res) => {
       (err) => {
         if (err) {
           console.error('Error saving Discord info:', err);
-          return res.redirect('http://localhost:3001/dashboard?discord_error=database&tab=profile');
+          return res.redirect('https://sailabs.xyz/dashboard?discord_linked=true&tab=profile');
         }
 
         db.get(
@@ -1196,7 +1196,7 @@ app.get('/api/discord/callback', async (req, res) => {
           (err, row) => {
             if (err) {
               console.error('Error fetching user:', err);
-              return res.redirect('http://localhost:3001/dashboard?discord_error=database&tab=profile');
+              return res.redirect('https://sailabs.xyz/dashboard?discord_linked=true&tab=profile');
             }
 
             console.log('User tier for', publicKey, ':', row.currentTier);
@@ -1204,14 +1204,14 @@ app.get('/api/discord/callback', async (req, res) => {
               assignRole(discordId, row.currentTier);
             }
 
-            res.redirect('http://localhost:3001/dashboard?discord_linked=true&tab=profile');
+            res.redirect('https://sailabs.xyz/dashboard?discord_linked=true&tab=profile');
           }
         );
       }
     );
   } catch (err) {
     console.error('Error in Discord OAuth callback:', err.message);
-    res.redirect('http://localhost:3001/dashboard?discord_error=oauth&tab=profile');
+    res.redirect('https://sailabs.xyz/dashboard?discord_linked=true&tab=profile');
   }
 });
 
