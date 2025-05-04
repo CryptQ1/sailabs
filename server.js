@@ -215,19 +215,18 @@ io.on('connection', (socket) => {
         if (err) console.error('Error setting node connected:', err);
       }
     );
-
+  
     const interval = setInterval(() => {
       db.get(`SELECT * FROM users WHERE publicKey = ? AND isNodeConnected = 1`, [publicKey], (err, row) => {
         if (err || !row) {
           console.error('Error fetching user or node not connected:', err || 'No row');
           return;
         }
-
-        const hoursToday = row.hoursToday + 0.00139;
+  
+        const hoursToday = row.hoursToday + 0.01667; // ~5 seconds
         const pointsPerHour = 10;
         const todayPoints = Math.floor(hoursToday * pointsPerHour);
-        const { tier, points: tierPoints } = calculateTierAndPoints(row.totalPoints);
-
+  
         const today = new Date();
         const todayStr = formatDate(today);
         db.run(
@@ -237,7 +236,7 @@ io.on('connection', (socket) => {
             if (err) console.error('Error saving daily points:', err);
           }
         );
-
+  
         const labels = [];
         for (let i = 13; i >= 0; i--) {
           const date = new Date(today);
@@ -257,54 +256,48 @@ io.on('connection', (socket) => {
               const index = labels.indexOf(row.date);
               if (index >= 0) dailyPoints[index] = row.points;
             });
-
+  
             db.get(
-              `SELECT SUM(points) as totalPoints FROM daily_points WHERE wallet = ?`,
+              `SELECT SUM(points) as totalPoints, COUNT(DISTINCT date) as daysSeason1 
+               FROM daily_points WHERE wallet = ?`,
               [publicKey],
-              (err, sumRow) => {
+              (err, stats) => {
                 if (err) {
-                  console.error('Error calculating totalPoints:', err);
+                  console.error('Error calculating stats:', err);
                   return;
                 }
-
-                db.get(
-                  `SELECT COUNT(DISTINCT date) as daysSeason1 FROM daily_points WHERE wallet = ?`,
-                  [publicKey],
-                  (err, countRow) => {
-                    if (err) {
-                      console.error('Error calculating daysSeason1:', err);
-                      return;
-                    }
-
-                    const totalPoints = sumRow.totalPoints || 0;
-                    const daysSeason1 = countRow.daysSeason1 || 0;
-
-                    db.run(
-                      `UPDATE users SET
-                        hoursToday = ?,
-                        todayPoints = ?,
-                        totalPoints = ?,
-                        daysSeason1 = ?,
-                        currentTier = ?
-                      WHERE publicKey = ?`,
-                      [hoursToday, todayPoints, totalPoints + tierPoints, daysSeason1, tier, publicKey],
-                      (err) => {
-                        if (err) console.error('Error updating user:', err);
-                        else {
-                          io.to(publicKey).emit('points-update', {
-                            totalPoints: totalPoints + tierPoints,
-                            todayPoints,
-                            hoursToday,
-                            daysSeason1,
-                            referralsCount: row.referralsCount,
-                            currentTier: tier,
-                            dailyPoints,
-                            networkStrength: row.isNodeConnected ? 4 : 0,
-                          });
-                          io.emit('leaderboard-update', { publicKey, totalPoints: totalPoints + tierPoints });
-                        }
+  
+                const totalPoints = stats.totalPoints || 0;
+                const daysSeason1 = stats.daysSeason1 || 0;
+                const { tier } = calculateTierAndPoints(totalPoints + (row.referralsCount * REFERRAL_POINTS_PER_USER));
+  
+                db.run(
+                  `UPDATE users SET
+                    hoursToday = ?,
+                    todayPoints = ?,
+                    totalPoints = ?,
+                    daysSeason1 = ?,
+                    currentTier = ?
+                  WHERE publicKey = ?`,
+                  [hoursToday, todayPoints, totalPoints + (row.referralsCount * REFERRAL_POINTS_PER_USER), daysSeason1, tier, publicKey],
+                  (err) => {
+                    if (err) console.error('Error updating user:', err);
+                    else {
+                      io.to(publicKey).emit('points-update', {
+                        totalPoints: totalPoints + (row.referralsCount * REFERRAL_POINTS_PER_USER),
+                        todayPoints,
+                        hoursToday,
+                        daysSeason1,
+                        referralsCount: row.referralsCount,
+                        currentTier: tier,
+                        dailyPoints,
+                        networkStrength: row.isNodeConnected ? 4 : 0,
+                      });
+                      io.emit('leaderboard-update', { publicKey, totalPoints: totalPoints + (row.referralsCount * REFERRAL_POINTS_PER_USER) });
+                      if (row.discordId && tier !== row.currentTier) {
+                        assignRole(row.discordId, tier);
                       }
-                    );
+                    }
                   }
                 );
               }
@@ -312,8 +305,8 @@ io.on('connection', (socket) => {
           }
         );
       });
-    }, 5000);
-
+    }, 60000);
+  
     socket.on('node-disconnect', () => {
       db.run(
         `UPDATE users SET isNodeConnected = 0 WHERE publicKey = ?`,
@@ -324,7 +317,7 @@ io.on('connection', (socket) => {
       );
       clearInterval(interval);
     });
-
+  
     socket.on('disconnect', () => {
       clearInterval(interval);
       db.run(
@@ -347,7 +340,47 @@ cron.schedule('0 0 * * *', () => {
         console.error('Error resetting todayPoints and hoursToday:', err);
       } else {
         console.log('Successfully reset todayPoints and hoursToday');
-        io.emit('points-update', { reset: true });
+        // Fetch all users to emit updated points
+        db.all(`SELECT publicKey FROM users`, (err, rows) => {
+          if (err) {
+            console.error('Error fetching users for points update:', err);
+            return;
+          }
+          rows.forEach(({ publicKey }) => {
+            db.get(`SELECT * FROM users WHERE publicKey = ?`, [publicKey], (err, user) => {
+              if (err || !user) return;
+              const today = new Date();
+              const labels = [];
+              for (let i = 13; i >= 0; i--) {
+                const date = new Date(today);
+                date.setDate(today.getDate() - i);
+                labels.push(formatDate(date));
+              }
+              db.all(
+                `SELECT date, points FROM daily_points WHERE wallet = ? AND date IN (${labels.map(() => '?').join(',')})`,
+                [publicKey, ...labels],
+                (err, rows) => {
+                  if (err) return;
+                  const dailyPoints = Array(14).fill(0);
+                  rows.forEach((row) => {
+                    const index = labels.indexOf(row.date);
+                    if (index >= 0) dailyPoints[index] = row.points;
+                  });
+                  io.to(publicKey).emit('points-update', {
+                    totalPoints: user.totalPoints || 0,
+                    todayPoints: 0,
+                    hoursToday: 0,
+                    daysSeason1: user.daysSeason1 || 0,
+                    referralsCount: user.referralsCount || 0,
+                    currentTier: user.currentTier || 'None',
+                    dailyPoints,
+                    networkStrength: user.isNodeConnected ? 4 : 0,
+                  });
+                }
+              );
+            });
+          });
+        });
       }
     }
   );
@@ -529,13 +562,13 @@ app.post('/api/auth/sign', async (req, res) => {
                   }
                 );
               });
-
+          
               if (referrer) {
                 const newReferralsCount = (referrer.referralsCount || 0) + 1;
                 const referralPoints = REFERRAL_POINTS_PER_USER;
                 const newTotalPoints = (referrer.totalPoints || 0) + referralPoints;
                 const { tier } = calculateTierAndPoints(newTotalPoints);
-
+          
                 await new Promise((resolve, reject) => {
                   db.serialize(() => {
                     db.run('BEGIN TRANSACTION');
@@ -572,8 +605,7 @@ app.post('/api/auth/sign', async (req, res) => {
                     });
                   });
                 });
-                console.log(`Referrer ${referrer.publicKey}: Added ${referralPoints} points, newTotalPoints=${newTotalPoints}, newTier=${tier}`);
-
+          
                 const today = new Date();
                 const labels = [];
                 for (let i = 13; i >= 0; i--) {
@@ -596,7 +628,7 @@ app.post('/api/auth/sign', async (req, res) => {
                   const index = labels.indexOf(row.date);
                   if (index >= 0) dailyPoints[index] = row.points;
                 });
-
+          
                 io.to(referrer.publicKey).emit('points-update', {
                   totalPoints: newTotalPoints,
                   todayPoints: (referrer.todayPoints || 0) + referralPoints,
@@ -611,7 +643,7 @@ app.post('/api/auth/sign', async (req, res) => {
                   publicKey: referrer.publicKey,
                   totalPoints: newTotalPoints,
                 });
-
+          
                 await new Promise((resolve, reject) => {
                   db.run(
                     `UPDATE users SET usedReferralCode = ? WHERE publicKey = ?`,
@@ -622,14 +654,11 @@ app.post('/api/auth/sign', async (req, res) => {
                     }
                   );
                 });
-
+          
                 db.get(`SELECT discordId FROM users WHERE publicKey = ?`, [referrer.publicKey], (err, row) => {
                   if (err) console.error('Error fetching referrer discordId:', err);
                   else if (row && row.discordId) assignRole(row.discordId, tier);
                 });
-                console.log(`Saved usedReferralCode ${referralCode} for user ${publicKey}`);
-              } else {
-                console.warn(`Referral code ${referralCode} not found`);
               }
             } catch (err) {
               console.error('Error processing referral:', err);
@@ -785,37 +814,26 @@ app.get('/api/user-stats', authenticateJWT, (req, res) => {
           });
 
           db.get(
-            `SELECT SUM(points) as totalPoints FROM daily_points WHERE wallet = ?`,
+            `SELECT SUM(points) as totalPoints, COUNT(DISTINCT date) as daysSeason1 
+             FROM daily_points WHERE wallet = ?`,
             [publicKey],
-            (err, sumRow) => {
+            (err, stats) => {
               if (err) {
-                console.error('Error calculating totalPoints:', err);
-                return res.status(500).json({ error: 'Failed to calculate totalPoints' });
+                console.error('Error calculating stats:', err);
+                return res.status(500).json({ error: 'Failed to calculate stats' });
               }
 
-              db.get(
-                `SELECT COUNT(DISTINCT date) as daysSeason1 FROM daily_points WHERE wallet = ?`,
-                [publicKey],
-                (err, countRow) => {
+              const totalPoints = (stats.totalPoints || 0) + (row.referralsCount * REFERRAL_POINTS_PER_USER);
+              const daysSeason1 = stats.daysSeason1 || 0;
+              const { tier } = calculateTierAndPoints(totalPoints);
+
+              db.run(
+                `UPDATE users SET totalPoints = ?, currentTier = ?, daysSeason1 = ? WHERE publicKey = ?`,
+                [totalPoints, tier, daysSeason1, publicKey],
+                (err) => {
                   if (err) {
-                    console.error('Error calculating daysSeason1:', err);
-                    return res.status(500).json({ error: 'Failed to calculate daysSeason1' });
+                    console.error('Error updating user stats:', err);
                   }
-
-                  const totalPoints = sumRow.totalPoints || 0;
-                  const daysSeason1 = countRow.daysSeason1 || 0;
-                  const { tier } = calculateTierAndPoints(totalPoints);
-
-                  db.run(
-                    `UPDATE users SET totalPoints = ?, currentTier = ? WHERE publicKey = ?`,
-                    [totalPoints, tier, publicKey],
-                    (err) => {
-                      if (err) {
-                        console.error('Error updating user stats:', err);
-                      }
-                    }
-                  );
-
                   res.json({
                     dailyPoints,
                     totalPoints,
@@ -830,6 +848,10 @@ app.get('/api/user-stats', authenticateJWT, (req, res) => {
                   });
                 }
               );
+
+              if (row.discordId && tier !== row.currentTier) {
+                assignRole(row.discordId, tier);
+              }
             }
           );
         }
@@ -1128,7 +1150,7 @@ app.get('/api/leaderboard', authenticateJWT, (req, res) => {
 // Endpoint to initiate OAuth flow
 app.get('/api/discord/login', authenticateJWT, (req, res) => {
   const publicKey = req.user.publicKey;
-  const redirectUri = encodeURIComponent('https://sailabs.xyz/api/discord/callback');
+  const redirectUri = encodeURIComponent('http://localhost:3000/api/discord/callback');
   const oauthUrl = `https://discord.com/api/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=identify&state=${publicKey}`;
   res.json({ oauthUrl });
 });
@@ -1139,12 +1161,12 @@ app.get('/api/discord/callback', async (req, res) => {
 
   if (error === 'access_denied') {
     console.log('User cancelled Discord OAuth, redirecting to dashboard');
-    return res.redirect('https://sailabs.xyz/dashboard?discord_linked=true&tab=profile');
+    return res.redirect('http://localhost:3001/dashboard?discord_linked=true&tab=profile');
   }
 
   if (!code || !publicKey) {
     console.error('Missing code or publicKey in callback:', req.query);
-    return res.redirect('https://sailabs.xyz/dashboard?discord_error=cancelled&tab=profile');
+    return res.redirect('http://localhost:3001/dashboard?discord_error=cancelled&tab=profile');
   }
 
   try {
@@ -1173,8 +1195,8 @@ app.get('/api/discord/callback', async (req, res) => {
 
     const discordId = userResponse.data.id;
     const discordUsername = userResponse.data.discriminator === '0' 
-      ? `@${userResponse.data.username}`
-      : `@${userResponse.data.username}#${userResponse.data.discriminator}`;
+      ? `${userResponse.data.username}`
+      : `${userResponse.data.username}#${userResponse.data.discriminator}`;
     const discordAvatar = userResponse.data.avatar 
       ? `https://cdn.discordapp.com/avatars/${discordId}/${userResponse.data.avatar}.png?size=64`
       : null;
@@ -1187,7 +1209,7 @@ app.get('/api/discord/callback', async (req, res) => {
       (err) => {
         if (err) {
           console.error('Error saving Discord info:', err);
-          return res.redirect('https://sailabs.xyz/dashboard?discord_linked=true&tab=profile');
+          return res.redirect('http://localhost:3001/dashboard?discord_error=database&tab=profile');
         }
 
         db.get(
@@ -1196,7 +1218,7 @@ app.get('/api/discord/callback', async (req, res) => {
           (err, row) => {
             if (err) {
               console.error('Error fetching user:', err);
-              return res.redirect('https://sailabs.xyz/dashboard?discord_linked=true&tab=profile');
+              return res.redirect('http://localhost:3001/dashboard?discord_error=database&tab=profile');
             }
 
             console.log('User tier for', publicKey, ':', row.currentTier);
@@ -1204,14 +1226,14 @@ app.get('/api/discord/callback', async (req, res) => {
               assignRole(discordId, row.currentTier);
             }
 
-            res.redirect('https://sailabs.xyz/dashboard?discord_linked=true&tab=profile');
+            res.redirect('http://localhost:3001/dashboard?discord_linked=true&tab=profile');
           }
         );
       }
     );
   } catch (err) {
     console.error('Error in Discord OAuth callback:', err.message);
-    res.redirect('https://sailabs.xyz/dashboard?discord_linked=true&tab=profile');
+    res.redirect('http://localhost:3000/dashboard?discord_error=oauth&tab=profile');
   }
 });
 

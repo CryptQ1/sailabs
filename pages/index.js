@@ -118,6 +118,7 @@ export default function Home() {
       }
     });
 
+
     // Existing Animations (Preserved)
     function initLinesAnimation() {
       const canvas = document.getElementById('linesCanvas');
@@ -278,7 +279,7 @@ export default function Home() {
       const ctx = canvas.getContext('2d');
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
-    
+
       // Kiểm tra thiết bị di động
       const isMobile = window.innerWidth <= 768;
       const fontSize = isMobile ? 10 : 14; // Giảm font trên di động
@@ -288,7 +289,7 @@ export default function Home() {
       const mouse = { x: null, y: null };
       let lastUpdate = 0;
       let animationFrameId;
-    
+
       // Số liệu nhấp nháy
       const stats = [
         { value: 1000, current: 0, label: 'Nodes Active' },
@@ -296,43 +297,43 @@ export default function Home() {
         { value: 200, current: 0, label: 'AI Models' },
       ];
       let isCounting = false;
-    
+
       // Xử lý tương tác chuột hoặc chạm
       const updateInteractionPosition = (x, y) => {
         const rect = canvas.getBoundingClientRect();
         mouse.x = x - rect.left;
         mouse.y = y - rect.top;
       };
-    
+
       const handleMouseMove = (e) => {
         updateInteractionPosition(e.clientX, e.clientY);
       };
-    
+
       const handleTouchMove = (e) => {
         e.preventDefault(); // Ngăn cuộn mặc định khi chạm
         const touch = e.touches[0];
         updateInteractionPosition(touch.clientX, touch.clientY);
       };
-    
+
       canvas.addEventListener('mousemove', handleMouseMove);
       canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-    
+
       function draw(timestamp) {
         if (timestamp - lastUpdate < (isMobile ? 40 : 33)) { // 25 FPS trên di động, 30 FPS trên desktop
           animationFrameId = requestAnimationFrame(draw);
           return;
         }
         lastUpdate = timestamp;
-    
+
         ctx.fillStyle = 'rgba(10, 10, 10, 0.05)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
+
         ctx.font = `${fontSize}px Roboto Mono`;
         for (let i = 0; i < drops.length; i++) {
           const text = chars.charAt(Math.floor(Math.random() * chars.length)); // Sử dụng chars
           const x = i * fontSize;
           const y = drops[i] * fontSize;
-    
+
           let glow = false;
           if (mouse.x !== null && mouse.y !== null) {
             const distance = Math.sqrt((mouse.x - x) ** 2 + (mouse.y - y) ** 2);
@@ -349,16 +350,16 @@ export default function Home() {
             ctx.fillStyle = '#1E3A8A';
             ctx.shadowBlur = 0;
           }
-    
+
           ctx.fillText(text, x, y);
-    
+
           if (y > canvas.height && Math.random() > 0.975) {
             drops[i] = 0;
           } else {
             drops[i]++;
           }
         }
-    
+
         // Vẽ số liệu nhấp nháy
         if (isCounting) {
           stats.forEach((stat, index) => {
@@ -375,10 +376,10 @@ export default function Home() {
             ctx.shadowBlur = 0;
           });
         }
-    
+
         animationFrameId = requestAnimationFrame(draw);
       }
-    
+
       const handleResize = () => {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
@@ -388,7 +389,7 @@ export default function Home() {
         }
       };
       window.addEventListener('resize', handleResize);
-    
+
       const matrixSection = document.querySelector('.matrix-section');
       const observer = new IntersectionObserver(
         (entries) => {
@@ -407,7 +408,7 @@ export default function Home() {
         { threshold: 0.3 }
       );
       observer.observe(matrixSection);
-    
+
       return () => {
         canvas.removeEventListener('mousemove', handleMouseMove);
         canvas.removeEventListener('touchmove', handleTouchMove);
@@ -426,35 +427,65 @@ export default function Home() {
         return;
       }
 
+      let touchStartX = 0;
+      let touchEndX = 0;
+
       const handleWheel = (e) => {
-        e.preventDefault(); // Giảm tốc độ cuộn mặc định
-        if (scrollTimeout.current) return; // Ngăn chuyển đổi liên tục
+        e.preventDefault();
+        if (scrollTimeout.current) return;
 
         const delta = e.deltaY;
         if (delta > 0) {
-          // Cuộn xuống: Chuyển sang item tiếp theo
           setCurrentIndex((prevIndex) => (prevIndex === items.length - 1 ? 0 : prevIndex + 1));
         } else if (delta < 0) {
-          // Cuộn lên: Chuyển sang item trước
           setCurrentIndex((prevIndex) => (prevIndex === 0 ? items.length - 1 : prevIndex - 1));
         }
 
-        // Giới hạn tốc độ chuyển đổi
         scrollTimeout.current = setTimeout(() => {
           scrollTimeout.current = null;
-        }, 600); // Chuyển đổi mỗi 600ms
+        }, 600);
       };
 
-      // Gắn sự kiện wheel
-      carouselSection.addEventListener('wheel', handleWheel, { passive: false });
+      const handleTouchStart = (e) => {
+        touchStartX = e.touches[0].clientX;
+      };
 
-      // Giảm tốc độ cuộn toàn trang khi trong carousel-section
+      const handleTouchMove = (e) => {
+        touchEndX = e.touches[0].clientX;
+      };
+
+      const handleTouchEnd = () => {
+        if (scrollTimeout.current) return;
+
+        const deltaX = touchEndX - touchStartX;
+        const minSwipeDistance = 50; // Minimum distance for a swipe
+
+        if (Math.abs(deltaX) > minSwipeDistance) {
+          if (deltaX > 0) {
+            // Swipe right: Previous item
+            setCurrentIndex((prevIndex) => (prevIndex === 0 ? items.length - 1 : prevIndex - 1));
+          } else {
+            // Swipe left: Next item
+            setCurrentIndex((prevIndex) => (prevIndex === items.length - 1 ? 0 : prevIndex + 1));
+          }
+
+          scrollTimeout.current = setTimeout(() => {
+            scrollTimeout.current = null;
+          }, 600);
+        }
+      };
+
+      carouselSection.addEventListener('wheel', handleWheel, { passive: false });
+      carouselSection.addEventListener('touchstart', handleTouchStart, { passive: true });
+      carouselSection.addEventListener('touchmove', handleTouchMove, { passive: true });
+      carouselSection.addEventListener('touchend', handleTouchEnd, { passive: true });
+
       const handleSectionScroll = (e) => {
         const rect = carouselSection.getBoundingClientRect();
         if (rect.top <= 0 && rect.bottom >= 0) {
           e.preventDefault();
           window.scrollBy({
-            top: e.deltaY * 0.5, // Giảm tốc độ cuộn xuống 30%
+            top: e.deltaY * 0.5,
             behavior: 'smooth',
           });
         }
@@ -463,6 +494,9 @@ export default function Home() {
 
       return () => {
         carouselSection.removeEventListener('wheel', handleWheel);
+        carouselSection.removeEventListener('touchstart', handleTouchStart);
+        carouselSection.removeEventListener('touchmove', handleTouchMove);
+        carouselSection.removeEventListener('touchend', handleTouchEnd);
         window.removeEventListener('wheel', handleSectionScroll);
       };
     }
@@ -802,7 +836,7 @@ export default function Home() {
             <a href="https://x.com/sailabs_" target="_blank" rel="noopener noreferrer">
               <img src="/twitter.png" alt="Twitter" className="social-icon" loading="lazy" />
             </a>
-            <a href="https://discord.com" target="_blank" rel="noopener noreferrer">
+            <a href="https://discord.gg/CGrERSJpvw" target="_blank" rel="noopener noreferrer">
               <img src="/discord.png" alt="Discord" className="social-icon" loading="lazy" />
             </a>
             <a href="https://telegram.org" target="_blank" rel="noopener noreferrer">
@@ -828,6 +862,11 @@ export default function Home() {
           <a href="/docs">Docs</a>
         </div>
       </div>
+
+      <section className="liquid-section">
+        <canvas id="liquidCanvas" className="liquid-canvas"></canvas>
+      </section>
+
       <div className="network-container">
         <div className="text-container">
           <h1 id="typewriter-text"></h1>
@@ -988,10 +1027,10 @@ export default function Home() {
             <p className="copyright">© S.AI, 2025. All rights reserved.</p>
           </div>
           <div className="social-icons">
-            <a href="https://twitter.com" target="_blank" rel="noopener noreferrer">
+            <a href="https://x.com/sailabs_" target="_blank" rel="noopener noreferrer">
               <img src="/twitter.png" alt="Twitter" className="social-icon" loading="lazy" />
             </a>
-            <a href="https://discord.com" target="_blank" rel="noopener noreferrer">
+            <a href="https://discord.gg/CGrERSJpvw" target="_blank" rel="noopener noreferrer">
               <img src="/discord.png" alt="Discord" className="social-icon" loading="lazy" />
             </a>
             <a href="https://telegram.org" target="_blank" rel="noopener noreferrer">

@@ -222,7 +222,7 @@ export default function Dashboard() {
     try {
       const stats = await fetchWithAuth('/user-stats');
       if (stats) {
-        console.log(`Fetched stats: totalPoints=${stats.totalPoints}, currentTier=${stats.currentTier}`);
+        console.log('Fetched user stats:', stats);
         setTotalPoints(stats.totalPoints || 0);
         setTodayPoints(stats.todayPoints || 0);
         setHoursToday(stats.hoursToday || 0);
@@ -232,7 +232,7 @@ export default function Dashboard() {
         setNetworkStrength(stats.networkStrength || 0);
         setIsNodeConnected(stats.networkStrength > 0);
         setDailyPoints(stats.dailyPoints || Array(14).fill(0));
-
+  
         const today = new Date();
         const todayStr = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
         if (walletAddress) {
@@ -787,7 +787,7 @@ export default function Dashboard() {
                 ) : (
                   <div className="social-content">
                     <a
-                      href="https://discord.com/channels/1365343044282486945/1365348227796172873" // Thay bằng URL Discord thật
+                      href="https://discord.gg/CGrERSJpvw" // Thay bằng URL Discord thật
                       target="_blank"
                       rel="noopener noreferrer"
                       className="discord-join-link"
@@ -875,7 +875,7 @@ export default function Dashboard() {
                     Copy Code
                   </button>
                 </div>
-                <div className="referral-input-container">
+                {/* <div className="referral-input-container">
                   <input type="text" className="referral-input" value={referralLink} readOnly />
                   <button
                     className="referral-input-button copy-link"
@@ -886,7 +886,7 @@ export default function Dashboard() {
                   <button className="referral-input-button share" onClick={shareReferral}>
                     Share
                   </button>
-                </div>
+                </div> */}
                 <div className="summary-row">
                   <span className="summary-label">Total Referrals:</span>
                   <span className="summary-value">{referralsCount}</span>
@@ -1352,15 +1352,20 @@ export default function Dashboard() {
 
       socketRef.current.on('points-update', (data) => {
         console.log('Received points-update event:', data);
-        setTotalPoints(data.totalPoints || 0);
-        setTodayPoints(data.todayPoints || 0);
-        setHoursToday(data.hoursToday || 0);
-        setDaysSeason1(data.daysSeason1 || 0);
-        setReferralsCount(data.referralsCount || 0);
-        setCurrentTier(data.currentTier || 'None');
-        setNetworkStrength(data.networkStrength || 0);
-        setIsNodeConnected(data.networkStrength > 0);
-        setDailyPoints(data.dailyPoints || Array(14).fill(0));
+        if (data.reset) {
+          setTodayPoints(0);
+          setHoursToday(0);
+        } else {
+          setTotalPoints(data.totalPoints || 0);
+          setTodayPoints(data.todayPoints || 0);
+          setHoursToday(data.hoursToday || 0);
+          setDaysSeason1(data.daysSeason1 || 0);
+          setReferralsCount(data.referralsCount || 0);
+          setCurrentTier(data.currentTier || 'None');
+          setNetworkStrength(data.networkStrength || 0);
+          setIsNodeConnected(data.networkStrength > 0);
+          setDailyPoints(data.dailyPoints || Array(14).fill(0));
+        }
       });
 
       socketRef.current.on('leaderboard-update', () => {
@@ -1559,9 +1564,9 @@ export default function Dashboard() {
       )}
       <footer>
         <div className="footer-links">
-          <a href="https://x.com/sailabs_">Twitter</a>
-          <a href="https://discord.com/channels/1365343044282486945/1365348227796172873" target='blank'>Discord</a>
-          <a href="https://sailabs.xyz/">Website</a>
+          <a href="https://x.com/sailabs_" target="blank">Twitter</a>
+          <a href="https://discord.gg/CGrERSJpvw" target='blank'>Discord</a>
+          <a href="https://sailabs.xyz/" target="blank">Website</a>
         </div>
       </footer>
     </div>

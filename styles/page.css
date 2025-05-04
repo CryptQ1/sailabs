@@ -320,6 +320,7 @@ header.scrolled {
   100% { transform: translateX(calc(-100% - 320px)); }
 }
 
+
 /* Matrix Section */
 .matrix-section {
   width: 100%;
@@ -731,7 +732,7 @@ header.scrolled {
 }
 
 .roadmap-list {
-  max-width: 1000px;
+  max-width: 1200px;
   margin: 0 auto;
   list-style: none;
   position: relative;
@@ -761,6 +762,7 @@ header.scrolled {
   margin-bottom: 100px;
   position: relative;
   opacity: 0;
+  border-radius: 20px;
   transform: translateY(30px);
   transition: opacity 0.8s ease, transform 0.8s ease, box-shadow 0.3s ease;
 }
@@ -771,6 +773,7 @@ header.scrolled {
 }
 
 .roadmap-list li:hover {
+  border-radius: 20px;
   box-shadow: 0 0 30px rgba(59, 130, 246, 0.5);
 }
 
@@ -1061,6 +1064,11 @@ footer {
     padding: 30px 0;
   }
 
+  .carousel-items {
+    width: 80%;
+    height: 80%;
+  }
+
   .carousel-container {
     max-width: 95%;
   }
@@ -1073,20 +1081,8 @@ footer {
     max-height: 500px;
   }
 
-  .carousel-button {
-    padding: 15px;
-    font-size: 20px;
-    height: 100px;
-    border-radius: 20px;
-  }
 
-  .carousel-button.prev {
-    left: calc(50% - 48% - 10px);
-  }
 
-  .carousel-button.next {
-    right: calc(50% - 48% - 10px);
-  }
 
   .stats {
     margin: 30px 10px;
@@ -1190,7 +1186,7 @@ footer {
 
   .roadmap-list::before {
     left: 20px;
-    width: 6px;
+    width: 10px;
   }
 
   .roadmap-list li {
@@ -1201,13 +1197,14 @@ footer {
 
   .roadmap-list li::after {
     left: 23px;
-    top: 20px;
+    top: 30px;
     width: 40px;
   }
 
   .roadmap-list .time {
     margin: 0 0 15px 60px;
     width: auto;
+    top: 15px;
     font-size: 14px;
     padding: 10px 20px;
   }
