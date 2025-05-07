@@ -269,154 +269,193 @@ export default function Home() {
       window.addEventListener('resize', initLinesAndParticles);
     }
 
-    // Matrix Rain
-    function initMatrixAnimation() {
-      const canvas = document.getElementById('matrixCanvas');
-      if (!canvas) {
-        console.warn('No matrixCanvas found');
-        return;
+  // Trong hàm initMatrixAnimation
+// Trong hàm initMatrixAnimation
+function initMatrixAnimation() {
+  const canvas = document.getElementById('matrixCanvas');
+  if (!canvas) {
+    console.warn('No matrixCanvas found');
+    return;
+  }
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  // Kiểm tra thiết bị di động
+  const isMobile = window.innerWidth <= 768;
+  const fontSize = isMobile ? 10 : 14;
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()_+-=[]{}|;:,.<>?';
+  const columns = Math.floor(canvas.width / fontSize);
+  const drops = Array(columns).fill(0);
+  const mouse = { x: null, y: null };
+  let lastUpdate = 0;
+  let animationFrameId;
+
+  // Số liệu nhấp nháy
+  const stats = [
+    { value: 1000, current: 0, label: 'Nodes Active' },
+    { value: 500, current: 0, label: 'Data Points' },
+    { value: 200, current: 0, label: 'AI Models' },
+  ];
+  let isCounting = false;
+  let hasCounted = false; // Biến để kiểm soát chỉ chạy một lần
+  let startTime = null;
+  const duration = 2000; // Thời gian hiệu ứng (2 giây)
+  let blinkState = true; // Trạng thái nhấp nháy
+
+  // Hàm định dạng số với dấu phân cách hàng nghìn
+  const formatNumber = (num) => {
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  };
+
+  // Hàm tính giá trị easing (easeOutQuad)
+  const easeOutQuad = (t) => {
+    return 1 - (1 - t) * (1 - t);
+  };
+
+  // Xử lý tương tác chuột hoặc chạm
+  const updateInteractionPosition = (x, y) => {
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = x - rect.left;
+    mouse.y = y - rect.top;
+  };
+
+  const handleMouseMove = (e) => {
+    updateInteractionPosition(e.clientX, e.clientY);
+  };
+
+  const handleTouchMove = (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    updateInteractionPosition(touch.clientX, touch.clientY);
+  };
+
+  canvas.addEventListener('mousemove', handleMouseMove);
+  canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+
+  function draw(timestamp) {
+    if (timestamp - lastUpdate < (isMobile ? 40 : 33)) {
+      animationFrameId = requestAnimationFrame(draw);
+      return;
+    }
+    lastUpdate = timestamp;
+
+    ctx.fillStyle = 'rgba(10, 10, 10, 0.05)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.font = `${fontSize}px Roboto Mono`;
+    for (let i = 0; i < drops.length; i++) {
+      const text = chars.charAt(Math.floor(Math.random() * chars.length));
+      const x = i * fontSize;
+      const y = drops[i] * fontSize;
+
+      let glow = false;
+      if (mouse.x !== null && mouse.y !== null) {
+        const distance = Math.sqrt((mouse.x - x) ** 2 + (mouse.y - y) ** 2);
+        if (distance < (isMobile ? 100 : 150)) {
+          glow = true;
+          ctx.fillStyle = '#3B82F6';
+          ctx.shadowColor = '#3B82F6';
+          ctx.shadowBlur = isMobile ? 5 : 10;
+        } else {
+          ctx.fillStyle = '#1E3A8A';
+          ctx.shadowBlur = 0;
+        }
+      } else {
+        ctx.fillStyle = '#1E3A8A';
+        ctx.shadowBlur = 0;
       }
-      const ctx = canvas.getContext('2d');
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
 
-      // Kiểm tra thiết bị di động
-      const isMobile = window.innerWidth <= 768;
-      const fontSize = isMobile ? 10 : 14; // Giảm font trên di động
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()_+-=[]{}|;:,.<>?'; // Định nghĩa chars
-      const columns = Math.floor(canvas.width / fontSize);
-      const drops = Array(columns).fill(0);
-      const mouse = { x: null, y: null };
-      let lastUpdate = 0;
-      let animationFrameId;
+      ctx.fillText(text, x, y);
 
-      // Số liệu nhấp nháy
-      const stats = [
-        { value: 1000, current: 0, label: 'Nodes Active' },
-        { value: 500, current: 0, label: 'Data Points' },
-        { value: 200, current: 0, label: 'AI Models' },
-      ];
-      let isCounting = false;
+      if (y > canvas.height && Math.random() > 0.975) {
+        drops[i] = 0;
+      } else {
+        drops[i]++;
+      }
+    }
 
-      // Xử lý tương tác chuột hoặc chạm
-      const updateInteractionPosition = (x, y) => {
-        const rect = canvas.getBoundingClientRect();
-        mouse.x = x - rect.left;
-        mouse.y = y - rect.top;
-      };
+    // Vẽ số liệu
+    ctx.font = isMobile ? '28px Roboto Mono' : '36px Roboto Mono'; // Tăng kích thước font
+    stats.forEach((stat, index) => {
+      const yPosition = canvas.height * (0.15 + index * 0.2); // Tăng khoảng cách giữa các số liệu
+      const text = `${formatNumber(stat.current)} ${stat.label}`;
 
-      const handleMouseMove = (e) => {
-        updateInteractionPosition(e.clientX, e.clientY);
-      };
-
-      const handleTouchMove = (e) => {
-        e.preventDefault(); // Ngăn cuộn mặc định khi chạm
-        const touch = e.touches[0];
-        updateInteractionPosition(touch.clientX, touch.clientY);
-      };
-
-      canvas.addEventListener('mousemove', handleMouseMove);
-      canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-
-      function draw(timestamp) {
-        if (timestamp - lastUpdate < (isMobile ? 40 : 33)) { // 25 FPS trên di động, 30 FPS trên desktop
-          animationFrameId = requestAnimationFrame(draw);
-          return;
-        }
-        lastUpdate = timestamp;
-
-        ctx.fillStyle = 'rgba(10, 10, 10, 0.05)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        ctx.font = `${fontSize}px Roboto Mono`;
-        for (let i = 0; i < drops.length; i++) {
-          const text = chars.charAt(Math.floor(Math.random() * chars.length)); // Sử dụng chars
-          const x = i * fontSize;
-          const y = drops[i] * fontSize;
-
-          let glow = false;
-          if (mouse.x !== null && mouse.y !== null) {
-            const distance = Math.sqrt((mouse.x - x) ** 2 + (mouse.y - y) ** 2);
-            if (distance < (isMobile ? 100 : 150)) {
-              glow = true;
-              ctx.fillStyle = '#3B82F6';
-              ctx.shadowColor = '#3B82F6';
-              ctx.shadowBlur = isMobile ? 5 : 10;
-            } else {
-              ctx.fillStyle = '#1E3A8A';
-              ctx.shadowBlur = 0;
+      if (isCounting && !hasCounted) {
+        // Tính giá trị hiện tại với easing
+        if (!startTime) startTime = timestamp;
+        const elapsed = timestamp - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const easedProgress = easeOutQuad(progress);
+        stat.current = Math.floor(easedProgress * stat.value);
+        if (progress >= 1) {
+          stat.current = stat.value;
+          hasCounted = true; // Đánh dấu đã hoàn thành
+          // Bắt đầu nhấp nháy
+          let blinkCount = 0;
+          const blinkInterval = setInterval(() => {
+            blinkState = !blinkState;
+            blinkCount++;
+            if (blinkCount >= 6) { // Nhấp nháy 3 lần (6 trạng thái)
+              clearInterval(blinkInterval);
+              blinkState = true; // Giữ hiển thị cố định
             }
-          } else {
-            ctx.fillStyle = '#1E3A8A';
-            ctx.shadowBlur = 0;
-          }
-
-          ctx.fillText(text, x, y);
-
-          if (y > canvas.height && Math.random() > 0.975) {
-            drops[i] = 0;
-          } else {
-            drops[i]++;
-          }
+          }, 200); // Nhấp nháy mỗi 200ms
         }
+      }
 
-        // Vẽ số liệu nhấp nháy
-        if (isCounting) {
-          stats.forEach((stat, index) => {
-            if (stat.current < stat.value) {
-              stat.current += Math.ceil(stat.value / (50 + Math.random() * 50));
-              if (stat.current > stat.value) stat.current = stat.value;
-            }
-            ctx.font = isMobile ? '30px Roboto Mono' : '40px Roboto Mono';
-            ctx.fillStyle = isMobile ? 'rgba(230, 230, 230, 0.9)' : 'rgba(163, 163, 163, 0.8)';
-            // ctx.shadowColor = '#E6E6E6';
-            // ctx.shadowBlur = isMobile ? 3 : 5;
-            const yPosition = canvas.height * (0.15 + index * 0.25); // 15%, 50%, 85%
-            ctx.fillText(`${stat.current} ${stat.label}`, isMobile ? 50 : 100, yPosition);
-            ctx.shadowBlur = 0;
+      // Vẽ số liệu với hiệu ứng nhấp nháy
+      if (!hasCounted || (hasCounted && blinkState)) {
+        ctx.fillStyle = '#E6E6E6'; // Màu trắng sáng, không bóng
+        ctx.fillText(text, isMobile ? 20 : 50, yPosition);
+      }
+    });
+
+    animationFrameId = requestAnimationFrame(draw);
+  }
+
+  const handleResize = () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    drops.length = Math.floor(canvas.width / fontSize);
+    for (let i = 0; i < drops.length; i++) {
+      drops[i] = Math.floor(Math.random() * canvas.height / fontSize);
+    }
+  };
+  window.addEventListener('resize', handleResize);
+
+  const matrixSection = document.querySelector('.matrix-section');
+  const observer = new IntersectionObserver(
+    (entries) => {
+      if (entries[0].isIntersecting) {
+        if (!animationFrameId) draw(0);
+        if (!hasCounted) {
+          isCounting = true; // Chỉ kích hoạt nếu chưa đếm
+          startTime = null; // Reset thời gian
+          stats.forEach((stat) => {
+            stat.current = 0; // Reset giá trị hiện tại
           });
         }
-
-        animationFrameId = requestAnimationFrame(draw);
-      }
-
-      const handleResize = () => {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        drops.length = Math.floor(canvas.width / fontSize);
-        for (let i = 0; i < drops.length; i++) {
-          drops[i] = Math.floor(Math.random() * canvas.height / fontSize);
+      } else {
+        if (animationFrameId) {
+          cancelAnimationFrame(animationFrameId);
+          animationFrameId = null;
         }
-      };
-      window.addEventListener('resize', handleResize);
+        isCounting = false;
+      }
+    },
+    { threshold: 0.3 }
+  );
+  observer.observe(matrixSection);
 
-      const matrixSection = document.querySelector('.matrix-section');
-      const observer = new IntersectionObserver(
-        (entries) => {
-          if (entries[0].isIntersecting) {
-            if (!animationFrameId) draw(0);
-            isCounting = true;
-          } else {
-            if (animationFrameId) {
-              cancelAnimationFrame(animationFrameId);
-              animationFrameId = null;
-            }
-            isCounting = false;
-            stats.forEach((stat) => (stat.current = 0));
-          }
-        },
-        { threshold: 0.3 }
-      );
-      observer.observe(matrixSection);
-
-      return () => {
-        canvas.removeEventListener('mousemove', handleMouseMove);
-        canvas.removeEventListener('touchmove', handleTouchMove);
-        window.removeEventListener('resize', handleResize);
-        observer.disconnect();
-        if (animationFrameId) cancelAnimationFrame(animationFrameId);
-      };
-    }
+  return () => {
+    canvas.removeEventListener('mousemove', handleMouseMove);
+    canvas.removeEventListener('touchmove', handleTouchMove);
+    window.removeEventListener('resize', handleResize);
+    observer.disconnect();
+    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+  };
+}
 
     // CarouselScroll
 
@@ -839,9 +878,9 @@ export default function Home() {
             <a href="https://discord.gg/CGrERSJpvw" target="_blank" rel="noopener noreferrer">
               <img src="/discord.png" alt="Discord" className="social-icon" loading="lazy" />
             </a>
-            <a href="https://telegram.org" target="_blank" rel="noopener noreferrer">
+            {/* <a href="https://telegram.org" target="_blank" rel="noopener noreferrer">
               <img src="/telegram.png" alt="Telegram" className="social-icon" loading="lazy" />
-            </a>
+            </a> */}
           </div>
           <a href={process.env.NEXT_PUBLIC_DASHBOARD_URL} target="_blank" rel="noopener noreferrer">
             Dashboard
@@ -1033,20 +1072,20 @@ export default function Home() {
             <a href="https://discord.gg/CGrERSJpvw" target="_blank" rel="noopener noreferrer">
               <img src="/discord.png" alt="Discord" className="social-icon" loading="lazy" />
             </a>
-            <a href="https://telegram.org" target="_blank" rel="noopener noreferrer">
+            {/* <a href="https://telegram.org" target="_blank" rel="noopener noreferrer">
               <img src="/telegram.png" alt="Telegram" className="social-icon" loading="lazy" />
-            </a>
+            </a> */}
           </div>
           <div className="footer-links-container">
             <div className="footer-links-left">
-              <a href="#about">About</a>
-              <a href="#blog">Blog</a>
-              <a href="#support">Support</a>
+              <a href="https://s-ai.gitbook.io/sai-docs" target='blank'>About</a>
+              <a href="https://mirror.xyz/0xAb8d1C8bb2197b6B993B62a936D08474f24558AD" target='blank'>Blog</a>
+              <a href="https://discord.com/channels/1365343044282486945/1369524461858197614" target='blank'>Support</a>
             </div>
             <div className="footer-links-right">
-              <a href="#whitepaper">Whitepaper</a>
-              <a href="#docs">Docs</a>
-              <a href="#faq">FAQ</a>
+              <a href="/S.AILabs-WHITEPAPER.pdf" target='blank'>Whitepaper</a>
+              <a href="https://s-ai.gitbook.io/sai-docs/" target='blank'>Docs</a>
+              <a href="https://s-ai.gitbook.io/sai-docs/getting-started/publish-your-docs" target='blank'>FAQ</a>
             </div>
           </div>
         </div>

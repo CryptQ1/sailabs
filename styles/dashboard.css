@@ -434,9 +434,11 @@ header.scrolled {
 .tab {
   padding: 10px 20px;
   font-size: 15px;
-  color: #A3A3A3;
+  color:#E6E6E6 ;
+  background: none;
   cursor: pointer;
   transition: all 0.3s ease;
+  border: none;
   border-radius: 6px;
 }
 
@@ -447,7 +449,7 @@ header.scrolled {
 
 .tab.active {
   color: #E6E6E6;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  border: 1px solid rgba(190, 211, 246, 0.3);
 }
 
 /* Tab Content */
@@ -489,7 +491,7 @@ header.scrolled {
   padding: 20px;
   border-radius: 10px;
   text-align: center;
-  border: 1px solid rgba(34, 197, 94, 0.3);
+  border: 1px solid rgba(59, 130, 246, 0.3);
   transition: transform 0.3s ease;
   animation: fadeInUp 1s ease-out;
 }
@@ -513,7 +515,7 @@ header.scrolled {
 }
 
 .card-value {
-  border: 1px solid rgba(34, 197, 94, 0.3);
+  border: 1px solid rgba(59, 130, 246, 0.3);
   padding: 15px;
   border-radius: 12px;
   margin-top: 10px;
@@ -533,12 +535,12 @@ header.scrolled {
   height: 100%;
   border-radius: 6px;
   object-fit: contain;
-  border-radius: 20px;
 }
 
 .profile-card .tier-image:hover {
   transform: scale(1.05);
 }
+
 
 /* Social Tables (Solana Wallet & Discord) */
 .social-tables {
@@ -571,6 +573,7 @@ header.scrolled {
 
 .social-content {
   display: flex;
+  align-items: center;
   flex-direction: column;
   gap: 12px;
 }
@@ -583,7 +586,6 @@ header.scrolled {
   height: 24px;
   background-size: cover;
   margin-right: 8px;
-  vertical-align: middle;
 }
 
 .social-table.solana .social-content::before {
@@ -620,6 +622,10 @@ header.scrolled {
   flex-direction: row;
   align-items: center;
   gap: 8px;
+}
+
+.disconnect-button {
+  width: 200px;
 }
 
 /* Loading  */
@@ -725,13 +731,14 @@ header.scrolled {
 }
 
 .social-table.discord .link-discord-button {
+  margin-top: 10px;
   padding: 8px 16px;
   background: none;
   color: white;
   border: 2px solid rgba(59, 130, 246, 0.3);
-  border-radius: 10px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 15px;
   transition: background-color 0.3s, transform 0.3s;
 }
 
@@ -741,6 +748,7 @@ header.scrolled {
 }
 
 .social-table.discord .discord-join-link {
+  margin-bottom: 10px;
   display: flex;
   align-items: center;
   gap: 6px; /* Khoảng cách giữa chữ và logo */
@@ -761,7 +769,7 @@ header.scrolled {
 .social-table.discord .discord-logo {
   width: 20px;
   height: 20px;
-  object-fit: contain; 
+  object-fit: contain; /* Đảm bảo logo không bị méo */
 }
 
 .discord-actions {
@@ -771,12 +779,23 @@ header.scrolled {
   justify-content: center;
 }
 
+
+/* dashboard.css */
+
+.discord-action-button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
 .disconnect-discord-button {
   background: none;
   color: white;
   border: 2px solid rgba(59, 130, 246, 0.3);
-  border-radius: 10px;
   padding: 8px 16px;
+  border-radius: 4px;
   cursor: pointer;
   margin-top: 10px;
   margin-right: 10px;
@@ -796,8 +815,8 @@ header.scrolled {
   background: none;
   color: white;
   border: 2px solid rgba(59, 130, 246, 0.3);
-  border-radius: 10px;
   padding: 8px 16px;
+  border-radius: 4px;
   cursor: pointer;
   margin-top: 10px;
   transition: background-color 0.3s;
@@ -805,7 +824,11 @@ header.scrolled {
 
 .reload-role-button:hover {
   background-color: #0056b3;
-  
+}
+
+.reload-role-button:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
 }
 
 /* error */
@@ -1195,7 +1218,6 @@ footer {
   .points-table,
   .connection-table,
   .connect-table {
-    align-items: center;
     padding: 15px;
   }
 
@@ -1230,12 +1252,6 @@ footer {
   .discord-actions {
     flex-direction: column;
     align-items: center;
-  }
-
-  .reload-role-button {
-    margin-right: 10px;
-    padding: 8px 15px;
-
   }
 
   .tier-info .tier-image {

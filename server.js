@@ -10,6 +10,13 @@ const { Server } = require('socket.io');
 const cron = require('node-cron');
 const path = require('path');
 const axios = require('axios');
+const { PublicKey } = require('@solana/web3.js');
+const { Connection, clusterApiUrl } = require('@solana/web3.js');
+const { Program } = require('@coral-xyz/anchor');
+
+// Khởi tạo kết nối Solana
+const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
+const programId = new PublicKey('7y6NMpfPHnD52YMkfZRnjs4EdorG9yqXURu7Neg6v5Jq');
 
 const app = express();
 const server = http.createServer(app);
@@ -458,7 +465,7 @@ async function assignRole(discordId, tier) {
 // API
 
 app.post('/api/auth/sign', async (req, res) => {
-  const { publicKey, signature, referralCode } = req.body;
+  const { publicKey, signature, referralCode, nodeConnection } = req.body;
   if (!publicKey || !signature) {
     console.error('Missing publicKey or signature:', { publicKey, signature });
     return res.status(400).json({ error: 'Missing publicKey or signature' });
@@ -525,23 +532,10 @@ app.post('/api/auth/sign', async (req, res) => {
           }
         }
 
-        const saveSignatureAndProceed = async () => {
-          const timestamp = Date.now();
+        if (nodeConnection) {
           await new Promise((resolve, reject) => {
             db.run(
-              `INSERT OR REPLACE INTO signatures (publicKey, signature, timestamp) VALUES (?, ?, ?)`,
-              [publicKey, signature, timestamp],
-              (err) => {
-                if (err) reject(err);
-                resolve();
-              }
-            );
-          });
-          console.log('Signature saved for:', publicKey);
-
-          await new Promise((resolve, reject) => {
-            db.run(
-              `UPDATE users SET lastConnected = ? WHERE publicKey = ?`,
+              `UPDATE users SET isNodeConnected = 1, lastConnected = ? WHERE publicKey = ?`,
               [Date.now(), publicKey],
               (err) => {
                 if (err) reject(err);
@@ -549,132 +543,153 @@ app.post('/api/auth/sign', async (req, res) => {
               }
             );
           });
+          io.to(publicKey).emit('points-update', {
+            isNodeConnected: true,
+            networkStrength: 4,
+          });
+        }
 
-          if (referralCode && referralCode !== userReferralCode && (!existingUser || !existingUser.usedReferralCode)) {
-            try {
-              const referrer = await new Promise((resolve, reject) => {
-                db.get(
-                  `SELECT publicKey, referralsCount, totalPoints, todayPoints, hoursToday, daysSeason1, isNodeConnected FROM users WHERE referralCode = ?`,
-                  [referralCode],
-                  (err, row) => {
+        const timestamp = Date.now();
+        await new Promise((resolve, reject) => {
+          db.run(
+            `INSERT OR REPLACE INTO signatures (publicKey, signature, timestamp) VALUES (?, ?, ?)`,
+            [publicKey, signature, timestamp],
+            (err) => {
+              if (err) reject(err);
+              resolve();
+            }
+          );
+        });
+        console.log('Signature saved for:', publicKey);
+
+        await new Promise((resolve, reject) => {
+          db.run(
+            `UPDATE users SET lastConnected = ? WHERE publicKey = ?`,
+            [Date.now(), publicKey],
+            (err) => {
+              if (err) reject(err);
+              resolve();
+            }
+          );
+        });
+
+        if (referralCode && referralCode !== userReferralCode && (!existingUser || !existingUser.usedReferralCode)) {
+          try {
+            const referrer = await new Promise((resolve, reject) => {
+              db.get(
+                `SELECT publicKey, referralsCount, totalPoints, todayPoints, hoursToday, daysSeason1, isNodeConnected FROM users WHERE referralCode = ?`,
+                [referralCode],
+                (err, row) => {
+                  if (err) reject(err);
+                  resolve(row);
+                }
+              );
+            });
+
+            if (referrer) {
+              const newReferralsCount = (referrer.referralsCount || 0) + 1;
+              const referralPoints = REFERRAL_POINTS_PER_USER;
+              const newTotalPoints = (referrer.totalPoints || 0) + referralPoints;
+              const { tier } = calculateTierAndPoints(newTotalPoints);
+
+              await new Promise((resolve, reject) => {
+                db.serialize(() => {
+                  db.run('BEGIN TRANSACTION');
+                  db.run(
+                    `UPDATE users SET
+                      referralsCount = ?,
+                      currentTier = ?,
+                      todayPoints = todayPoints + ?,
+                      totalPoints = ?
+                    WHERE publicKey = ?`,
+                    [newReferralsCount, tier, referralPoints, newTotalPoints, referrer.publicKey],
+                    (err) => {
+                      if (err) {
+                        db.run('ROLLBACK');
+                        reject(err);
+                      }
+                    }
+                  );
+                  const today = new Date();
+                  const todayStr = formatDate(today);
+                  db.run(
+                    `INSERT OR REPLACE INTO daily_points (wallet, date, points) VALUES (?, ?, ?)`,
+                    [referrer.publicKey, todayStr, (referrer.todayPoints || 0) + referralPoints],
+                    (err) => {
+                      if (err) {
+                        db.run('ROLLBACK');
+                        reject(err);
+                      }
+                    }
+                  );
+                  db.run('COMMIT', (err) => {
                     if (err) reject(err);
-                    resolve(row);
+                    resolve();
+                  });
+                });
+              });
+
+              const today = new Date();
+              const labels = [];
+              for (let i = 13; i >= 0; i--) {
+                const date = new Date(today);
+                date.setDate(today.getDate() - i);
+                labels.push(formatDate(date));
+              }
+              const dailyRows = await new Promise((resolve, reject) => {
+                db.all(
+                  `SELECT date, points FROM daily_points WHERE wallet = ? AND date IN (${labels.map(() => '?').join(',')})`,
+                  [referrer.publicKey, ...labels],
+                  (err, rows) => {
+                    if (err) reject(err);
+                    resolve(rows);
                   }
                 );
               });
-          
-              if (referrer) {
-                const newReferralsCount = (referrer.referralsCount || 0) + 1;
-                const referralPoints = REFERRAL_POINTS_PER_USER;
-                const newTotalPoints = (referrer.totalPoints || 0) + referralPoints;
-                const { tier } = calculateTierAndPoints(newTotalPoints);
-          
-                await new Promise((resolve, reject) => {
-                  db.serialize(() => {
-                    db.run('BEGIN TRANSACTION');
-                    db.run(
-                      `UPDATE users SET
-                        referralsCount = ?,
-                        currentTier = ?,
-                        todayPoints = todayPoints + ?,
-                        totalPoints = ?
-                      WHERE publicKey = ?`,
-                      [newReferralsCount, tier, referralPoints, newTotalPoints, referrer.publicKey],
-                      (err) => {
-                        if (err) {
-                          db.run('ROLLBACK');
-                          reject(err);
-                        }
-                      }
-                    );
-                    const today = new Date();
-                    const todayStr = formatDate(today);
-                    db.run(
-                      `INSERT OR REPLACE INTO daily_points (wallet, date, points) VALUES (?, ?, ?)`,
-                      [referrer.publicKey, todayStr, (referrer.todayPoints || 0) + referralPoints],
-                      (err) => {
-                        if (err) {
-                          db.run('ROLLBACK');
-                          reject(err);
-                        }
-                      }
-                    );
-                    db.run('COMMIT', (err) => {
-                      if (err) reject(err);
-                      resolve();
-                    });
-                  });
-                });
-          
-                const today = new Date();
-                const labels = [];
-                for (let i = 13; i >= 0; i--) {
-                  const date = new Date(today);
-                  date.setDate(today.getDate() - i);
-                  labels.push(formatDate(date));
-                }
-                const dailyRows = await new Promise((resolve, reject) => {
-                  db.all(
-                    `SELECT date, points FROM daily_points WHERE wallet = ? AND date IN (${labels.map(() => '?').join(',')})`,
-                    [referrer.publicKey, ...labels],
-                    (err, rows) => {
-                      if (err) reject(err);
-                      resolve(rows);
-                    }
-                  );
-                });
-                const dailyPoints = Array(14).fill(0);
-                dailyRows.forEach((row) => {
-                  const index = labels.indexOf(row.date);
-                  if (index >= 0) dailyPoints[index] = row.points;
-                });
-          
-                io.to(referrer.publicKey).emit('points-update', {
-                  totalPoints: newTotalPoints,
-                  todayPoints: (referrer.todayPoints || 0) + referralPoints,
-                  hoursToday: referrer.hoursToday || 0,
-                  daysSeason1: referrer.daysSeason1 || 0,
-                  referralsCount: newReferralsCount,
-                  currentTier: tier,
-                  dailyPoints,
-                  networkStrength: referrer.isNodeConnected ? 4 : 0,
-                });
-                io.emit('leaderboard-update', {
-                  publicKey: referrer.publicKey,
-                  totalPoints: newTotalPoints,
-                });
-          
-                await new Promise((resolve, reject) => {
-                  db.run(
-                    `UPDATE users SET usedReferralCode = ? WHERE publicKey = ?`,
-                    [referralCode, publicKey],
-                    (err) => {
-                      if (err) reject(err);
-                      resolve();
-                    }
-                  );
-                });
-          
-                db.get(`SELECT discordId FROM users WHERE publicKey = ?`, [referrer.publicKey], (err, row) => {
-                  if (err) console.error('Error fetching referrer discordId:', err);
-                  else if (row && row.discordId) assignRole(row.discordId, tier);
-                });
-              }
-            } catch (err) {
-              console.error('Error processing referral:', err);
+              const dailyPoints = Array(14).fill(0);
+              dailyRows.forEach((row) => {
+                const index = labels.indexOf(row.date);
+                if (index >= 0) dailyPoints[index] = row.points;
+              });
+
+              io.to(referrer.publicKey).emit('points-update', {
+                totalPoints: newTotalPoints,
+                todayPoints: (referrer.todayPoints || 0) + referralPoints,
+                hoursToday: referrer.hoursToday || 0,
+                daysSeason1: referrer.daysSeason1 || 0,
+                referralsCount: newReferralsCount,
+                currentTier: tier,
+                dailyPoints,
+                networkStrength: referrer.isNodeConnected ? 4 : 0,
+              });
+              io.emit('leaderboard-update', {
+                publicKey: referrer.publicKey,
+                totalPoints: newTotalPoints,
+              });
+
+              await new Promise((resolve, reject) => {
+                db.run(
+                  `UPDATE users SET usedReferralCode = ? WHERE publicKey = ?`,
+                  [referralCode, publicKey],
+                  (err) => {
+                    if (err) reject(err);
+                    resolve();
+                  }
+                );
+              });
+
+              db.get(`SELECT discordId FROM users WHERE publicKey = ?`, [referrer.publicKey], (err, row) => {
+                if (err) console.error('Error fetching referrer discordId:', err);
+                else if (row && row.discordId) assignRole(row.discordId, tier);
+              });
             }
+          } catch (err) {
+            console.error('Error processing referral:', err);
           }
-
-          const token = jwt.sign({ publicKey }, JWT_SECRET, { expiresIn: '24h' });
-          res.json({ token });
-        };
-
-        try {
-          await saveSignatureAndProceed();
-        } catch (err) {
-          console.error('Error saving signature or updating user:', err);
-          res.status(500).json({ error: 'Failed to save signature or update user' });
         }
+
+        const token = jwt.sign({ publicKey }, JWT_SECRET, { expiresIn: '24h' });
+        res.json({ token });
       }
     );
   } catch (error) {
