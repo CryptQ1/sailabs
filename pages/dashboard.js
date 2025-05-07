@@ -13,6 +13,7 @@ import { PublicKey, LAMPORTS_PER_SOL, SystemProgram, Transaction } from '@solana
 
 // Import Chart.js components
 const Bar = dynamic(() => import('react-chartjs-2').then((mod) => mod.Bar), { ssr: false });
+const ParticleEffect = dynamic(() => import('../components/ParticleEffect'), { ssr: false });
 import { Chart, LinearScale, CategoryScale, BarElement, Tooltip, Legend } from 'chart.js';
 
 Chart.register(LinearScale, CategoryScale, BarElement, Tooltip, Legend);
@@ -1358,7 +1359,7 @@ export default function Dashboard() {
         </div>
       ) : !isConnected ? (
         <div id="loginContainer" className="login-container" style={{ display: 'flex' }}>
-          <canvas id="particleCanvas" className="particle-canvas"></canvas>
+          <ParticleEffect />
           <div className="login-box">
             <h2>Sign In</h2>
             {showReferralInput ? (

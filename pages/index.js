@@ -86,10 +86,15 @@ export default function Home() {
       animate();
 
       const resizeCanvas = () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
+        const parent = canvas.parentElement;
+        const width = Math.min(parent.clientWidth, document.documentElement.clientWidth);
+        const height = window.innerHeight;
+        renderer.setSize(width, height);
+        camera.aspect = width / height;
         camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       };
+      resizeCanvas();
       window.addEventListener('resize', resizeCanvas);
 
       // Parallax effect
@@ -293,9 +298,9 @@ function initMatrixAnimation() {
 
   // Số liệu nhấp nháy
   const stats = [
-    { value: 1000, current: 0, label: 'Nodes Active' },
-    { value: 500, current: 0, label: 'Data Points' },
-    { value: 200, current: 0, label: 'AI Models' },
+    { value: 0, current: 0, label: 'Nodes Active' },
+    { value: 0, current: 0, label: 'Data Points' },
+    { value: 0, current: 0, label: 'AI Models' },
   ];
   let isCounting = false;
   let hasCounted = false; // Biến để kiểm soát chỉ chạy một lần
@@ -497,7 +502,7 @@ function initMatrixAnimation() {
         if (scrollTimeout.current) return;
 
         const deltaX = touchEndX - touchStartX;
-        const minSwipeDistance = 50; // Minimum distance for a swipe
+        const minSwipeDistance = 30; // Minimum distance for a swipe
 
         if (Math.abs(deltaX) > minSwipeDistance) {
           if (deltaX > 0) {
@@ -926,7 +931,7 @@ function initMatrixAnimation() {
         <img src="/logo9.png" alt="Logo 9" loading="lazy" />
       </div>
 
-      {/* Matrix */}
+
       <section className="matrix-section">
         <canvas id="matrixCanvas" className="matrix-canvas"></canvas>
       </section>
