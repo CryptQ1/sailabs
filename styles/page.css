@@ -321,7 +321,7 @@ header.scrolled {
   object-fit: contain;
   flex-shrink: 0;
   transition: transform 0.3s ease, filter 0.3s ease;
-  animation: scrollLogos 5s linear infinite;
+  animation: scrollLogos 15s linear infinite;
 }
 
 .logos img:hover {
@@ -330,8 +330,8 @@ header.scrolled {
 }
 
 @keyframes scrollLogos {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(calc(-100% - 80px)); } /* Adjusted for mobile */
+  0% { transform: translateX(100vh); }
+  100% { transform: translateX(calc(-100% - 320px)); } /* Adjusted for mobile */
 }
 
 /* Matrix Section */
@@ -1058,7 +1058,7 @@ footer {
   .logos img {
     height: 60px;
     max-width: 120px;
-    animation: scrollLogos 15s linear infinite;
+    animation: scrollLogos 5s linear infinite;
   }
 
   @keyframes scrollLogos {
@@ -1372,12 +1372,12 @@ footer {
   .logos img {
     height: 40px;
     max-width: 80px;
-    animation: scrollLogos 12s linear infinite;
+    animation: scrollLogos 20s linear infinite;
   }
 
   @keyframes scrollLogos {
-    0% { transform: translateX(0); }
-    100% { transform: translateX(calc(-100% - 20px)); }
+    0% { transform: translateX(100vh); }
+    100% { transform: translateX(calc(-100% - 320px)); }
   }
 
   /* Matrix Section */
