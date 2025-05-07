@@ -1276,6 +1276,7 @@ footer {
 
   /* Header */
   header {
+    height: 60px;
     padding: 8px 10px;
     flex-direction: column;
     align-items: center;

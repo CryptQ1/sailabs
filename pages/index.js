@@ -272,181 +272,191 @@ export default function Home() {
 
       window.addEventListener('resize', initLinesAndParticles);
     }
-function initMatrixAnimation() {
-  const canvas = document.getElementById('matrixCanvas');
-  if (!canvas) {
-    console.warn('No matrixCanvas found');
-    return;
-  }
-  const ctx = canvas.getContext('2d');
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-
-  const isMobile = window.innerWidth <= 768;
-  const fontSize = isMobile ? 10 : 14;
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()_+-=[]{}|;:,.<>?';
-  const columns = Math.floor(canvas.width / fontSize);
-  const drops = Array(columns).fill(0);
-  const mouse = { x: null, y: null };
-  let lastUpdate = 0;
-  let animationFrameId;
-
-  // Số liệu nhấp nháy
-  const stats = [
-    { value: 0, current: 0, label: 'Nodes Active' },
-    { value: 0, current: 0, label: 'Data Points' },
-    { value: 0, current: 0, label: 'AI Models' },
-  ];
-  let isCounting = false;
-  let hasCounted = false;
-  let startTime = null;
-  const duration = 2000; 
-  const formatNumber = (num) => {
-    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  };
-
-  const easeOutQuad = (t) => {
-    return 1 - (1 - t) * (1 - t);
-  };
-
-  const updateInteractionPosition = (x, y) => {
-    const rect = canvas.getBoundingClientRect();
-    mouse.x = x - rect.left;
-    mouse.y = y - rect.top;
-  };
-
-  const handleMouseMove = (e) => {
-    updateInteractionPosition(e.clientX, e.clientY);
-  };
-
-  const handleTouchMove = (e) => {
-    e.preventDefault();
-    const touch = e.touches[0];
-    updateInteractionPosition(touch.clientX, touch.clientY);
-  };
-
-  canvas.addEventListener('mousemove', handleMouseMove);
-  canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-
-  function draw(timestamp) {
-    if (timestamp - lastUpdate < (isMobile ? 40 : 33)) {
-      animationFrameId = requestAnimationFrame(draw);
-      return;
-    }
-    lastUpdate = timestamp;
-
-    ctx.fillStyle = 'rgba(10, 10, 10, 0.05)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.font = `${fontSize}px Roboto Mono`;
-    for (let i = 0; i < drops.length; i++) {
-      const text = chars.charAt(Math.floor(Math.random() * chars.length));
-      const x = i * fontSize;
-      const y = drops[i] * fontSize;
-
-      let glow = false;
-      if (mouse.x !== null && mouse.y !== null) {
-        const distance = Math.sqrt((mouse.x - x) ** 2 + (mouse.y - y) ** 2);
-        if (distance < (isMobile ? 100 : 150)) {
-          glow = true;
-          ctx.fillStyle = '#3B82F6';
-          ctx.shadowColor = '#3B82F6';
-          ctx.shadowBlur = isMobile ? 5 : 10;
-        } else {
-          ctx.fillStyle = '#1E3A8A';
-          ctx.shadowBlur = 0;
+    function initMatrixAnimation() {
+      const canvas = document.getElementById('matrixCanvas');
+      if (!canvas) {
+        console.warn('No matrixCanvas found');
+        return;
+      }
+      const ctx = canvas.getContext('2d');
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    
+      // Kiểm tra thiết bị di động
+      const isMobile = window.innerWidth <= 768;
+      const fontSize = isMobile ? 10 : 14;
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()_+-=[]{}|;:,.<>?';
+      const columns = Math.floor(canvas.width / fontSize);
+      const drops = Array(columns).fill(0);
+      const mouse = { x: null, y: null };
+      let lastUpdate = 0;
+      let animationFrameId;
+    
+      // Số liệu nhấp nháy
+      const stats = [
+        { value: 0, current: 0, label: 'Nodes Active' },
+        { value: 0, current: 0, label: 'Data Points' },
+        { value: 0, current: 0, label: 'AI Models' },
+      ];
+      let isCounting = false;
+      let hasCounted = false; // Biến để kiểm soát chỉ chạy một lần
+      let startTime = null;
+      const duration = 2000; // Thời gian hiệu ứng (2 giây)
+      let blinkState = true; // Trạng thái nhấp nháy, khai báo tại đây
+    
+      // Hàm định dạng số với dấu phân cách hàng nghìn
+      const formatNumber = (num) => {
+        return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      };
+    
+      // Hàm tính giá trị easing (easeOutQuad)
+      const easeOutQuad = (t) => {
+        return 1 - (1 - t) * (1 - t);
+      };
+    
+      // Xử lý tương tác chuột hoặc chạm
+      const updateInteractionPosition = (x, y) => {
+        const rect = canvas.getBoundingClientRect();
+        mouse.x = x - rect.left;
+        mouse.y = y - rect.top;
+      };
+    
+      const handleMouseMove = (e) => {
+        updateInteractionPosition(e.clientX, e.clientY);
+      };
+    
+      const handleTouchMove = (e) => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        updateInteractionPosition(touch.clientX, touch.clientY);
+      };
+    
+      canvas.addEventListener('mousemove', handleMouseMove);
+      canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    
+      function draw(timestamp) {
+        if (timestamp - lastUpdate < (isMobile ? 40 : 33)) {
+          animationFrameId = requestAnimationFrame(draw);
+          return;
         }
-      } else {
-        ctx.fillStyle = '#1E3A8A';
-        ctx.shadowBlur = 0;
-      }
-
-      ctx.fillText(text, x, y);
-
-      if (y > canvas.height && Math.random() > 0.975) {
-        drops[i] = 0;
-      } else {
-        drops[i]++;
-      }
-    }
-
-    ctx.font = isMobile ? '28px Roboto Mono' : '36px Roboto Mono'; 
-    stats.forEach((stat, index) => {
-      const yPosition = canvas.height * (0.15 + index * 0.2);
-      const text = `${formatNumber(stat.current)} ${stat.label}`;
-
-      if (isCounting && !hasCounted) {
-        if (!startTime) startTime = timestamp;
-        const elapsed = timestamp - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        const easedProgress = easeOutQuad(progress);
-        stat.current = Math.floor(easedProgress * stat.value);
-        if (progress >= 1) {
-          stat.current = stat.value;
-          hasCounted = true;
-          let blinkCount = 0;
-          const blinkInterval = setInterval(() => {
-            blinkState = !blinkState;
-            blinkCount++;
-            if (blinkCount >= 6) {
-              clearInterval(blinkInterval);
-              blinkState = true; 
+        lastUpdate = timestamp;
+    
+        ctx.fillStyle = 'rgba(10, 10, 10, 0.05)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+        ctx.font = `${fontSize}px Roboto Mono`;
+        for (let i = 0; i < drops.length; i++) {
+          const text = chars.charAt(Math.floor(Math.random() * chars.length));
+          const x = i * fontSize;
+          const y = drops[i] * fontSize;
+    
+          let glow = false;
+          if (mouse.x !== null && mouse.y !== null) {
+            const distance = Math.sqrt((mouse.x - x) ** 2 + (mouse.y - y) ** 2);
+            if (distance < (isMobile ? 100 : 150)) {
+              glow = true;
+              ctx.fillStyle = '#3B82F6';
+              ctx.shadowColor = '#3B82F6';
+              ctx.shadowBlur = isMobile ? 5 : 10;
+            } else {
+              ctx.fillStyle = '#1E3A8A';
+              ctx.shadowBlur = 0;
             }
-          }, 200); // Nhấp nháy mỗi 200ms
+          } else {
+            ctx.fillStyle = '#1E3A8A';
+            ctx.shadowBlur = 0;
+          }
+    
+          ctx.fillText(text, x, y);
+    
+          if (y > canvas.height && Math.random() > 0.975) {
+            drops[i] = 0;
+          } else {
+            drops[i]++;
+          }
         }
+    
+        // Vẽ số liệu
+        ctx.font = isMobile ? '28px Roboto Mono' : '36px Roboto Mono'; // Tăng kích thước font
+        stats.forEach((stat, index) => {
+          const yPosition = canvas.height * (0.15 + index * 0.25);
+          const text = `${formatNumber(stat.current)} ${stat.label}`;
+    
+          if (isCounting && !hasCounted) {
+            // Tính giá trị hiện tại với easing
+            if (!startTime) startTime = timestamp;
+            const elapsed = timestamp - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const easedProgress = easeOutQuad(progress);
+            stat.current = Math.floor(easedProgress * stat.value);
+            if (progress >= 1) {
+              stat.current = stat.value;
+              hasCounted = true; // Đánh dấu đã hoàn thành
+              // Bắt đầu nhấp nháy
+              let blinkCount = 0;
+              const blinkInterval = setInterval(() => {
+                blinkState = !blinkState;
+                blinkCount++;
+                if (blinkCount >= 6) { // Nhấp nháy 3 lần (6 trạng thái)
+                  clearInterval(blinkInterval);
+                  blinkState = true; // Giữ hiển thị cố định
+                }
+              }, 200); // Nhấp nháy mỗi 200ms
+            }
+          }
+    
+          // Vẽ số liệu với hiệu ứng nhấp nháy
+          if (!hasCounted || (hasCounted && blinkState)) {
+            ctx.fillStyle = '#E6E6E6'; // Màu trắng sáng, không bóng
+            ctx.fillText(text, isMobile ? 20 : 50, yPosition);
+          }
+        });
+    
+        animationFrameId = requestAnimationFrame(draw);
       }
-
-      if (!hasCounted || (hasCounted && blinkState)) {
-        ctx.fillStyle = '#E6E6E6'; 
-        ctx.fillText(text, isMobile ? 20 : 50, yPosition);
-      }
-    });
-
-    animationFrameId = requestAnimationFrame(draw);
-  }
-
-  const handleResize = () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    drops.length = Math.floor(canvas.width / fontSize);
-    for (let i = 0; i < drops.length; i++) {
-      drops[i] = Math.floor(Math.random() * canvas.height / fontSize);
+    
+      const handleResize = () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        drops.length = Math.floor(canvas.width / fontSize);
+        for (let i = 0; i < drops.length; i++) {
+          drops[i] = Math.floor(Math.random() * canvas.height / fontSize);
+        }
+      };
+      window.addEventListener('resize', handleResize);
+    
+      const matrixSection = document.querySelector('.matrix-section');
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries[0].isIntersecting) {
+            if (!animationFrameId) draw(0);
+            if (!hasCounted) {
+              isCounting = true; // Chỉ kích hoạt nếu chưa đếm
+              startTime = null; // Reset thời gian
+              stats.forEach((stat) => {
+                stat.current = 0; // Reset giá trị hiện tại
+              });
+            }
+          } else {
+            if (animationFrameId) {
+              cancelAnimationFrame(animationFrameId);
+              animationFrameId = null;
+            }
+            isCounting = false;
+          }
+        },
+        { threshold: 0.3 }
+      );
+      observer.observe(matrixSection);
+    
+      return () => {
+        canvas.removeEventListener('mousemove', handleMouseMove);
+        canvas.removeEventListener('touchmove', handleTouchMove);
+        window.removeEventListener('resize', handleResize);
+        observer.disconnect();
+        if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      };
     }
-  };
-  window.addEventListener('resize', handleResize);
-
-  const matrixSection = document.querySelector('.matrix-section');
-  const observer = new IntersectionObserver(
-    (entries) => {
-      if (entries[0].isIntersecting) {
-        if (!animationFrameId) draw(0);
-        if (!hasCounted) {
-          isCounting = true; 
-          startTime = null; 
-          stats.forEach((stat) => {
-            stat.current = 0; 
-          });
-        }
-      } else {
-        if (animationFrameId) {
-          cancelAnimationFrame(animationFrameId);
-          animationFrameId = null;
-        }
-        isCounting = false;
-      }
-    },
-    { threshold: 0.3 }
-  );
-  observer.observe(matrixSection);
-
-  return () => {
-    canvas.removeEventListener('mousemove', handleMouseMove);
-    canvas.removeEventListener('touchmove', handleTouchMove);
-    window.removeEventListener('resize', handleResize);
-    observer.disconnect();
-    if (animationFrameId) cancelAnimationFrame(animationFrameId);
-  };
-}
 
     // CarouselScroll
 

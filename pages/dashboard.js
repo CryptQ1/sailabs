@@ -1321,7 +1321,6 @@ export default function Dashboard() {
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta name="description" content="S.AI Dashboard on app.sailabs.xyz" />
-        <link rel="icon" href="/favicon.ico" />
       </Head>
       <header>
         <div className="logo">
