@@ -124,7 +124,6 @@ export default function Home() {
     });
 
 
-    // Existing Animations (Preserved)
     function initLinesAnimation() {
       const canvas = document.getElementById('linesCanvas');
       if (!canvas) {
@@ -273,9 +272,6 @@ export default function Home() {
 
       window.addEventListener('resize', initLinesAndParticles);
     }
-
-  // Trong hàm initMatrixAnimation
-// Trong hàm initMatrixAnimation
 function initMatrixAnimation() {
   const canvas = document.getElementById('matrixCanvas');
   if (!canvas) {
@@ -286,7 +282,6 @@ function initMatrixAnimation() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
 
-  // Kiểm tra thiết bị di động
   const isMobile = window.innerWidth <= 768;
   const fontSize = isMobile ? 10 : 14;
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()_+-=[]{}|;:,.<>?';
@@ -303,22 +298,17 @@ function initMatrixAnimation() {
     { value: 0, current: 0, label: 'AI Models' },
   ];
   let isCounting = false;
-  let hasCounted = false; // Biến để kiểm soát chỉ chạy một lần
+  let hasCounted = false;
   let startTime = null;
-  const duration = 2000; // Thời gian hiệu ứng (2 giây)
-  let blinkState = true; // Trạng thái nhấp nháy
-
-  // Hàm định dạng số với dấu phân cách hàng nghìn
+  const duration = 2000; 
   const formatNumber = (num) => {
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   };
 
-  // Hàm tính giá trị easing (easeOutQuad)
   const easeOutQuad = (t) => {
     return 1 - (1 - t) * (1 - t);
   };
 
-  // Xử lý tương tác chuột hoặc chạm
   const updateInteractionPosition = (x, y) => {
     const rect = canvas.getBoundingClientRect();
     mouse.x = x - rect.left;
@@ -380,14 +370,12 @@ function initMatrixAnimation() {
       }
     }
 
-    // Vẽ số liệu
-    ctx.font = isMobile ? '28px Roboto Mono' : '36px Roboto Mono'; // Tăng kích thước font
+    ctx.font = isMobile ? '28px Roboto Mono' : '36px Roboto Mono'; 
     stats.forEach((stat, index) => {
-      const yPosition = canvas.height * (0.15 + index * 0.2); // Tăng khoảng cách giữa các số liệu
+      const yPosition = canvas.height * (0.15 + index * 0.2);
       const text = `${formatNumber(stat.current)} ${stat.label}`;
 
       if (isCounting && !hasCounted) {
-        // Tính giá trị hiện tại với easing
         if (!startTime) startTime = timestamp;
         const elapsed = timestamp - startTime;
         const progress = Math.min(elapsed / duration, 1);
@@ -395,23 +383,21 @@ function initMatrixAnimation() {
         stat.current = Math.floor(easedProgress * stat.value);
         if (progress >= 1) {
           stat.current = stat.value;
-          hasCounted = true; // Đánh dấu đã hoàn thành
-          // Bắt đầu nhấp nháy
+          hasCounted = true;
           let blinkCount = 0;
           const blinkInterval = setInterval(() => {
             blinkState = !blinkState;
             blinkCount++;
-            if (blinkCount >= 6) { // Nhấp nháy 3 lần (6 trạng thái)
+            if (blinkCount >= 6) {
               clearInterval(blinkInterval);
-              blinkState = true; // Giữ hiển thị cố định
+              blinkState = true; 
             }
           }, 200); // Nhấp nháy mỗi 200ms
         }
       }
 
-      // Vẽ số liệu với hiệu ứng nhấp nháy
       if (!hasCounted || (hasCounted && blinkState)) {
-        ctx.fillStyle = '#E6E6E6'; // Màu trắng sáng, không bóng
+        ctx.fillStyle = '#E6E6E6'; 
         ctx.fillText(text, isMobile ? 20 : 50, yPosition);
       }
     });
@@ -435,10 +421,10 @@ function initMatrixAnimation() {
       if (entries[0].isIntersecting) {
         if (!animationFrameId) draw(0);
         if (!hasCounted) {
-          isCounting = true; // Chỉ kích hoạt nếu chưa đếm
-          startTime = null; // Reset thời gian
+          isCounting = true; 
+          startTime = null; 
           stats.forEach((stat) => {
-            stat.current = 0; // Reset giá trị hiện tại
+            stat.current = 0; 
           });
         }
       } else {
@@ -853,12 +839,12 @@ function initMatrixAnimation() {
     initStepsAnimation();
     initDeviceAndStatsAnimation();
     const cleanupMatrix = initMatrixAnimation();
-    const cleanupCarousel = initCarouselScroll(); // Thêm Matrix animation
+    const cleanupCarousel = initCarouselScroll(); 
 
     return () => {
       cleanupParticle();
       cleanupMatrix();
-      cleanupCarousel(); // Dọn dẹp Matrix animation
+      cleanupCarousel(); 
     };
   }, [currentIndex]);
 
@@ -908,11 +894,6 @@ function initMatrixAnimation() {
           <a href="/S.AILabs-WHITEPAPER.pdf" target='blank'>WHITEPAPER</a>
         </div>
       </div>
-
-      <section className="liquid-section">
-        <canvas id="liquidCanvas" className="liquid-canvas"></canvas>
-      </section>
-
       <div className="network-container">
         <div className="text-container">
           <h1 id="typewriter-text"></h1>
@@ -928,7 +909,6 @@ function initMatrixAnimation() {
         <img src="/logo4.png" alt="Logo 4" loading="lazy" />
         <img src="/logo5.png" alt="Logo 5" loading="lazy" />
         <img src="/logo6.png" alt="Logo 6" loading="lazy" />
-        <img src="/logo7.png" alt="Logo 7" loading="lazy" />
         <img src="/logo8.png" alt="Logo 8" loading="lazy" />
         <img src="/logo9.png" alt="Logo 9" loading="lazy" />
       </div>
@@ -999,7 +979,7 @@ function initMatrixAnimation() {
         <div className="step-item">
           <h2>Step 1: Access</h2>
           <button className="button" >
-            <span>S.AI APP (soon)</span>
+            <span>APP (soon)</span>
           </button>
         </div>
         <div className="step-item">

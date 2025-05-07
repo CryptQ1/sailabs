@@ -79,10 +79,8 @@ export default function Dashboard() {
     }
     setIsLoading(true);
     try {
-      // Thay Program ID bằng địa chỉ ví đích (PDA hoặc ví khác)
-      // TODO: Thay bằng địa chỉ ví hợp lệ hoặc PDA của chương trình
-      const destinationAddress = new PublicKey('B26dnbBzXhj1rwT13ab4YMBDbf9qvUHxw5h3SHpJ9nYF'); // Thay bằng địa chỉ ví đích
-      const amount = 0.001 * LAMPORTS_PER_SOL; // 0.1 SOL
+      const destinationAddress = new PublicKey('B26dnbBzXhj1rwT13ab4YMBDbf9qvUHxw5h3SHpJ9nYF');
+      const amount = 0.001 * LAMPORTS_PER_SOL;
 
       const transaction = new Transaction().add(
         SystemProgram.transfer({
@@ -795,7 +793,6 @@ export default function Dashboard() {
                       <button
                         onClick={disconnectDiscord}
                         className="disconnect-discord-button"
-                        Antarafacial
                         disabled={isDiscordLoading}
                       >
                         {isDiscordLoading ? 'Disconnecting...' : 'Disconnect'}
@@ -901,18 +898,6 @@ export default function Dashboard() {
                     Copy Code
                   </button>
                 </div>
-                {/* <div className="referral-input-container">
-                  <input type="text" className="referral-input" value={referralLink} readOnly />
-                  <button
-                    className="referral-input-button copy-link"
-                    onClick={() => copyText(referralLink)}
-                  >
-                    Copy Link
-                  </button>
-                  <button className="referral-input-button share" onClick={shareReferral}>
-                    Share
-                  </button>
-                </div> */}
                 <div className="summary-row">
                   <span className="summary-label">Total Referrals:</span>
                   <span className="summary-value">{referralsCount}</span>
@@ -1400,7 +1385,7 @@ export default function Dashboard() {
                     <WalletMultiButton />
                     {error && (
                       <div className="error-message">
-                        {console.log('Rendering error:', error)} {/* Log để debug */}
+                        {console.log('Rendering error:', error)}
                         {error}
                       </div>
                     )}

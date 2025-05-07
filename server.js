@@ -14,7 +14,6 @@ const { PublicKey } = require('@solana/web3.js');
 const { Connection, clusterApiUrl } = require('@solana/web3.js');
 const { Program } = require('@coral-xyz/anchor');
 
-// Khởi tạo kết nối Solana
 const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
 const programId = new PublicKey('7y6NMpfPHnD52YMkfZRnjs4EdorG9yqXURu7Neg6v5Jq');
 
@@ -34,7 +33,7 @@ const REFERRAL_POINTS_PER_USER = 50;
 const allowedOrigins = [
   'https://sailabs.xyz',
   'https://www.sailabs.xyz',
-  'http://localhost:3000', // Giữ lại để phát triển cục bộ
+  'http://localhost:3000',
   'http://localhost:3001',
 ];
 
@@ -51,7 +50,6 @@ app.use(cors({
 }));
 
 io.on('connection', (socket) => {
-  // Cấu hình CORS cho Socket.IO
   socket.on('connect', () => {
     console.log('Client connected:', socket.id);
   });
@@ -141,8 +139,8 @@ db.serialize(() => {
   addColumnIfNotExists('isNodeConnected', 'isNodeConnected INTEGER DEFAULT 0');
   addColumnIfNotExists('usedReferralCode', 'usedReferralCode TEXT');
   addColumnIfNotExists('discordId', 'discordId TEXT');
-  addColumnIfNotExists('discordUsername', 'discordUsername TEXT'); // Thêm
-  addColumnIfNotExists('discordAvatar', 'discordAvatar TEXT');     // Thêm
+  addColumnIfNotExists('discordUsername', 'discordUsername TEXT');
+  addColumnIfNotExists('discordAvatar', 'discordAvatar TEXT');
 });
 
 const authenticateJWT = (req, res, next) => {
@@ -230,7 +228,7 @@ io.on('connection', (socket) => {
           return;
         }
   
-        const hoursToday = row.hoursToday + 0.01667; // ~5 seconds
+        const hoursToday = row.hoursToday + 0.01667;
         const pointsPerHour = 10;
         const todayPoints = Math.floor(hoursToday * pointsPerHour);
   
@@ -347,7 +345,6 @@ cron.schedule('0 0 * * *', () => {
         console.error('Error resetting todayPoints and hoursToday:', err);
       } else {
         console.log('Successfully reset todayPoints and hoursToday');
-        // Fetch all users to emit updated points
         db.all(`SELECT publicKey FROM users`, (err, rows) => {
           if (err) {
             console.error('Error fetching users for points update:', err);
@@ -394,8 +391,6 @@ cron.schedule('0 0 * * *', () => {
 }, {
   timezone: 'UTC'
 });
-
-// Discord
 
 const { Client, IntentsBitField } = require('discord.js');
 
@@ -446,7 +441,6 @@ async function assignRole(discordId, tier) {
   }
 
   try {
-    // Remove old tier roles
     for (const existingRoleId of Object.values(TIER_ROLES)) {
       if (member.roles.cache.has(existingRoleId)) {
         await member.roles.remove(existingRoleId);
@@ -454,15 +448,12 @@ async function assignRole(discordId, tier) {
       }
     }
 
-    // Add new role
     await member.roles.add(roleId);
     console.log(`Assigned role ${role.name} to ${discordId} for tier ${tier}`);
   } catch (err) {
     console.error(`Error assigning role to ${discordId}:`, err);
   }
 }
-
-// API
 
 app.post('/api/auth/sign', async (req, res) => {
   const { publicKey, signature, referralCode, nodeConnection } = req.body;
@@ -733,8 +724,6 @@ app.post('/api/link-discord', authenticateJWT, (req, res) => {
   );
 });
 
-// Reload role 
-
 app.post('/api/discord/reload-role', authenticateJWT, async (req, res) => {
   const publicKey = req.user.publicKey;
 
@@ -898,7 +887,6 @@ app.post('/api/discord/disconnect', authenticateJWT, async (req, res) => {
   const publicKey = req.user.publicKey;
 
   try {
-    // Fetch discordId before removing
     const user = await new Promise((resolve, reject) => {
       db.get(
         `SELECT discordId FROM users WHERE publicKey = ?`,
@@ -911,7 +899,6 @@ app.post('/api/discord/disconnect', authenticateJWT, async (req, res) => {
     });
 
     if (user && user.discordId) {
-      // Remove tier roles from Discord
       const guild = discordClient.guilds.cache.get(process.env.DISCORD_GUILD_ID);
       if (guild) {
         const member = await guild.members.fetch(user.discordId).catch((err) => {
@@ -931,7 +918,6 @@ app.post('/api/discord/disconnect', authenticateJWT, async (req, res) => {
       }
     }
 
-    // Remove discord info from database
     await new Promise((resolve, reject) => {
       db.run(
         `UPDATE users SET discordId = NULL, discordUsername = NULL, discordAvatar = NULL WHERE publicKey = ?`,
@@ -1097,7 +1083,7 @@ app.post('/api/referrals/update', (req, res) => {
             return res.status(500).json({ error: 'Database error' });
           }
 
-          const tier = calculateTierAndPoints(pointsToAdd).tier; // Fixed: Use calculateTierAndPoints
+          const tier = calculateTierAndPoints(pointsToAdd).tier;
           db.run(
             `UPDATE users SET currentTier = ? WHERE publicKey = ?`,
             [tier, referredBy],
@@ -1162,7 +1148,6 @@ app.get('/api/leaderboard', authenticateJWT, (req, res) => {
   );
 });
 
-// Endpoint to initiate OAuth flow
 app.get('/api/discord/login', authenticateJWT, (req, res) => {
   const publicKey = req.user.publicKey;
   const redirectUri = encodeURIComponent('http://localhost:3000/api/discord/callback');
@@ -1170,7 +1155,6 @@ app.get('/api/discord/login', authenticateJWT, (req, res) => {
   res.json({ oauthUrl });
 });
 
-// Endpoint to handle callback from Discord
 app.get('/api/discord/callback', async (req, res) => {
   const { code, state: publicKey, error } = req.query;
 
