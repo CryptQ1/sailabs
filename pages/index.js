@@ -887,9 +887,9 @@ function initMatrixAnimation() {
               <img src="/telegram.png" alt="Telegram" className="social-icon" loading="lazy" />
             </a> */}
           </div>
-          <a href={process.env.NEXT_PUBLIC_DASHBOARD_URL} target="_blank" rel="noopener noreferrer">
+          {/* <a href={process.env.NEXT_PUBLIC_DASHBOARD_URL} target="_blank" rel="noopener noreferrer">
             Dashboard
-          </a>
+          </a> */}
         </div>
       </header>
       <div className="hero">
@@ -900,10 +900,12 @@ function initMatrixAnimation() {
           Blockchain
         </p>
         <div className="button-container">
-          <button className="button" onClick={handleLightNodeClick}>
-            <span>START NOW</span>
+          <button 
+            className="button" 
+            >
+            <span>TESTNET SOON</span>
           </button>
-          <a href="/docs">Docs</a>
+          <a href="/S.AILabs-WHITEPAPER.pdf" target='blank'>WHITEPAPER</a>
         </div>
       </div>
 
@@ -996,8 +998,8 @@ function initMatrixAnimation() {
       <div className="steps-list">
         <div className="step-item">
           <h2>Step 1: Access</h2>
-          <button className="button" onClick={handleLightNodeClick}>
-            <span>Dashboard</span>
+          <button className="button" >
+            <span>S.AI APP (soon)</span>
           </button>
         </div>
         <div className="step-item">

@@ -1362,6 +1362,9 @@ export default function Dashboard() {
           <ParticleEffect />
           <div className="login-box">
             <h2>Sign In</h2>
+            {showReferralInput && (
+            <p className="referral-optional-text">Referral Code (Optional)</p>
+          )}
             {showReferralInput ? (
               <div className="referral-code-container">
                 <div className="referral-code-input-wrapper">
